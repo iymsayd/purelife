@@ -15,7 +15,7 @@ export default function Header() {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [logoUrl, setLogoUrl] = useState<string>("http://purelife-egy.com/Images/pure-logo.jpeg");
-  
+    
   const dropdownRef = useRef<HTMLLIElement>(null);
   const logoutModalRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
@@ -188,7 +188,7 @@ export default function Header() {
 
             <div className="flex justify-center items-center order-1 md:order-2 my-1 md:my-0 md:mx-3">
               <Link href="/" className="inline-block">
-                <img src={logoUrl} alt="PureLife Logo" className="w-28 md:w-32 h-auto object-contain" />
+                <img src={logoUrl} alt="PureLife Logo" className="w-28 md:w-32 h-auto object-contain" {...({ priority: "true" } as any)} />
               </Link>
             </div>
 
