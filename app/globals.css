@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: #ffffff; /* الخلفية بيضاء في الوضع العادي */
+    --foreground: #0f172a; /* النص غامق وواضح */
+    --card: #ffffff;
+    --card-bg: #ffffff;
+    --secondary: #0ea5e9;
+    --border: #e2e8f0;
+  }
+
+  .dark {
+    --background: #0f172a; /* خلفية الدارك */
+    --foreground: #ffffff; /* النص أبيض في الدارك */
+    --card: #263c5f;     /* خلفية الكروت متناسقة */
+    --card-bg: #263c5f;    /* خلفية الكروت متناسقة */
+    --secondary: #0ea5e9;
+    --border: #334155;
+  }
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
