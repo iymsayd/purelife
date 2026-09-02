@@ -1,8 +1,10 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db, auth } from '@/lib/firebase';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { onAuthStateChanged } from 'firebase/auth';
+import { saveUserMessage } from '@/lib/messageService';
 
 interface NavItem {
   name: string;
@@ -15,6 +17,10 @@ export default function Footer() {
   const [submitted, setSubmitted] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', message: '' });
   
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [profileWarning, setProfileWarning] = useState(false);
+  const [initialUserData, setInitialUserData] = useState({ name: '', email: '' });
+
   const [footerData, setFooterData] = useState({
     title: "بيورلايف لحياة أفضل",
     description: "وكلاء معتمدون لجميع أجهزة التكييف<br />خبراء متخصصون في معالجة وتحلية المياة<br />موزعون لقطع غيار التكييفات وفلاتر المياة<br />مقايسات فنية وتركيبات وتجهيزات وصيانة لجميع أعمال التكييف والتبريد",
@@ -31,6 +37,42 @@ export default function Footer() {
     document.documentElement.setAttribute('dir', 'rtl');
     document.documentElement.setAttribute('lang', 'ar');
     fetchFooterSettings();
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setCurrentUser(user);
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            const fetchedName = userData.name || user.displayName || '';
+            const fetchedEmail = userData.email || user.email || '';
+            setFormData(prev => ({
+              ...prev,
+              name: fetchedName,
+              email: fetchedEmail
+            }));
+            setInitialUserData({ name: fetchedName, email: fetchedEmail });
+          } else {
+            const fetchedName = user.displayName || '';
+            const fetchedEmail = user.email || '';
+            setFormData(prev => ({
+              ...prev,
+              name: fetchedName,
+              email: fetchedEmail
+            }));
+            setInitialUserData({ name: fetchedName, email: fetchedEmail });
+          }
+        } catch (err) {
+          console.error("Error fetching user profile data:", err);
+        }
+      } else {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const fetchFooterSettings = async () => {
@@ -52,6 +94,17 @@ export default function Footer() {
       }
     } catch (error) {
       console.error("Error fetching footer settings:", error);
+    }
+  };
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    if (currentUser) {
+      if (field === 'name' && value !== initialUserData.name) {
+        setProfileWarning(true);
+      } else if (field === 'name' && value === initialUserData.name) {
+        setProfileWarning(false);
+      }
     }
   };
 
@@ -77,16 +130,29 @@ export default function Footer() {
 
       const result = await response.json();
       if (result.success) {
-        await addDoc(collection(db, 'footer_messages'), {
+        await saveUserMessage('footer', {
           name: formData.name.trim(),
           email: formData.email.trim(),
           message: formData.message.trim(),
-          createdAt: serverTimestamp(),
-          read: false
-        });
+        }, currentUser ? currentUser.uid : null);
+
+        if (currentUser && formData.name.trim() !== initialUserData.name) {
+          try {
+            const userRef = doc(db, 'users', currentUser.uid);
+            await updateDoc(userRef, { name: formData.name.trim() });
+            setInitialUserData(prev => ({ ...prev, name: formData.name.trim() }));
+          } catch (updateErr) {
+            console.error("Error updating profile name:", updateErr);
+          }
+        }
 
         setSubmitted(true);
-        setFormData({ name: '', email: '', message: '' });
+        setProfileWarning(false);
+        setFormData({ 
+          name: currentUser ? (initialUserData.name || currentUser.displayName || '') : '', 
+          email: currentUser ? (initialUserData.email || currentUser.email || '') : '', 
+          message: '' 
+        });
         setTimeout(() => setSubmitted(false), 5000);
       } else {
         alert("حدث خطأ أثناء الإرسال، حاول مرة أخرى.");
@@ -148,15 +214,20 @@ export default function Footer() {
             <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
               <div>
                 <label htmlFor="footer-name" className={labelClass}>الاسم</label>
-                <input id="footer-name" type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className={inputClass} />
+                <input id="footer-name" type="text" required value={formData.name} onChange={(e) => handleInputChange('name', e.target.value)} className={inputClass} />
               </div>
               <div>
                 <label htmlFor="footer-email" className={labelClass}>البريد الالكتروني</label>
-                <input id="footer-email" type="email" required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className={inputClass} />
+                <input id="footer-email" type="email" required disabled={!!currentUser} value={formData.email} onChange={(e) => handleInputChange('email', e.target.value)} className={`${inputClass} ${currentUser ? 'opacity-70 cursor-not-allowed' : ''}`} />
               </div>
+              {profileWarning && (
+                <p className="text-amber-400 text-[11px] font-medium leading-tight">
+                  تنبيه: أنت عدلت بياناتك، سيتم تحديث حسابك الأساسي تلقائياً عند الإرسال.
+                </p>
+              )}
               <div>
                 <label htmlFor="footer-message" className={labelClass}>الرسالة</label>
-                <textarea id="footer-message" rows={2} required value={formData.message} onChange={(e) => setFormData({ ...formData, message: e.target.value })} className={inputClass} />
+                <textarea id="footer-message" rows={2} required value={formData.message} onChange={(e) => handleInputChange('message', e.target.value)} className={`${inputClass} resize-y min-h-[70px] max-h-[140px]`} />
               </div>
               <button type="submit" disabled={loading} className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white transition-colors py-3 rounded-xl font-bold cursor-pointer mt-1 text-xs md:text-sm shadow-sm disabled:opacity-50">
                 {loading ? "جاري الإرسال..." : "إرسال الطلب"}

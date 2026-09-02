@@ -186,9 +186,14 @@ export default function Header() {
               ) : null}
             </div>
 
-            <div className="flex justify-center items-center order-1 md:order-2 my-1 md:my-0 md:mx-3">
+            <div className="flex justify-center items-center order-1 md:order-2 my-1 md:my-0 md:mx-3 min-h-[48px]">
               <Link href="/" className="inline-block">
-                <img src={logoUrl} alt="PureLife Logo" className="w-28 md:w-32 h-auto object-contain" {...({ priority: "true" } as any)} />
+                <img 
+                  src={logoUrl} 
+                  alt="PureLife Logo" 
+                  className="w-28 md:w-32 h-auto object-contain transition-opacity duration-300"
+                  loading="eager"
+                />
               </Link>
             </div>
 

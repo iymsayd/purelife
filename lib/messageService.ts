@@ -9,6 +9,7 @@ const collectionsMap: Record<string, string> = {
   contact: 'contact_messages',
   events: 'event_bookings',
   offers: 'offer_requests',
+  footer: 'footer_messages',
 };
 
 export async function saveUserMessage(type: string, data: any, userId?: string | null) {

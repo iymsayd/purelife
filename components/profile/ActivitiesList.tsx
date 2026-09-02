@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { db } from '@/lib/firebase';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { Eye, X, Calendar, FileText } from 'lucide-react';
 
 interface ActivitiesListProps {
@@ -23,16 +23,19 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
     { id: 'complaints', label: 'الشكاوى' },
     { id: 'offers', label: 'العروض' },
     { id: 'events', label: 'الأحداث' },
+    { id: 'footer', label: 'رسائل الفوتر' },
     { id: 'contact', label: 'تواصل معنا' },
   ];
 
-  const collectionsMap: Record<string, string> = {
-    maintenance: 'maintenance_requests',
-    complaints: 'complaints',
-    jobs: 'job_applications',
-    contact: 'contact_messages',
-    events: 'event_bookings',
-    offers: 'offer_requests',
+  // خريطة الكولكشنز مع استثناء الكولكشنز التي تتطلب صلاحيات أمنية خاصة للمستخدم العادي
+  const collectionsMap: Record<string, string[]> = {
+    maintenance: ['maintenance_requests', 'maintenance'],
+    complaints: ['complaints', 'suggestions'],
+    jobs: ['job_applications', 'jobs', 'careers'],
+    contact: ['contact_messages', 'contact', 'messages'],
+    events: ['event_bookings', 'events', 'eventRequests'],
+    offers: ['offer_requests', 'offers', 'offerRequests'],
+    footer: ['footer_messages', 'footerMessages', 'footer'], // سيتم جلبها بحذر أو بأمان لتجنب خطأ الـ permissions
   };
 
   const parseSafeDate = (timestamp: any): Date => {
@@ -51,7 +54,7 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
 
   useEffect(() => {
     const fetchActivities = async () => {
-      if (!user || !user.uid) {
+      if (!user || (!user.uid && !user.email)) {
         setLoading(false);
         setActivities([]);
         return;
@@ -60,42 +63,73 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
       setLoading(true);
       try {
         let allFetchedItems: any[] = [];
+        const userEmail = user.email ? user.email.toLowerCase().trim() : '';
+        const processedCollections = new Set<string>();
 
-        for (const [key, colName] of Object.entries(collectionsMap)) {
-          try {
-            const querySnapshot = await getDocs(collection(db, colName));
+        for (const [key, colNames] of Object.entries(collectionsMap)) {
+          for (const colName of colNames) {
+            if (processedCollections.has(colName)) continue;
+            processedCollections.add(colName);
 
-            querySnapshot.forEach((docSnap) => {
-              const data = docSnap.id ? docSnap.data() : null;
-              if (!data) return;
+            try {
+              const colRef = collection(db, colName);
+              let querySnapshot;
 
-              const isOwner = 
-                data.userId === user.uid || 
-                data.uid === user.uid || 
-                (data.email && user.email && data.email.toLowerCase() === user.email.toLowerCase());
+              // للتعامل مع كولكشن الفوتر أو الكولكشن المحمية دون تفجير خطأ الـ Permissions،
+              // نقوم بعمل Query بالفلترة (where) إن أمكن أو محاولة جلبها بأمان، وإذا فشلت نتخطاها بصمت.
+              try {
+                if (key === 'footer' && userEmail) {
+                  // محاولة جلب رسائل الفوتر المرتبطة ببريد المستخدم فقط لتجنب جلب كل المستندات
+                  const qEmail = query(colRef, where('email', '==', userEmail));
+                  querySnapshot = await getDocs(qEmail);
+                } else {
+                  querySnapshot = await getDocs(colRef);
+                }
+              } catch (innerErr) {
+                // في حال رفض الصلاحيات (Permission Denied) لكولكشن معين، نتجاهله تماماً ولا نكسر التطبيق
+                console.warn(`Skipped collection ${colName} due to permissions.`);
+                continue;
+              }
 
-              if (isOwner) {
-                allFetchedItems.push({
-                  id: docSnap.id,
-                  sourceCollection: key,
-                  typeLabel: 
-                    key === 'maintenance' ? 'طلب صيانة' :
-                    key === 'complaints' ? 'شكوى / اقتراح' :
-                    key === 'jobs' ? 'طلب توظيف' :
-                    key === 'offers' ? 'طلب عرض' :
-                    key === 'events' ? 'حجز حدث' : 'رسالة تواصل',
-                  ...data,
-                  parsedDate: parseSafeDate(data.createdAt || data.date || data.timestamp),
+              if (querySnapshot) {
+                querySnapshot.forEach((docSnap) => {
+                  const data = docSnap.data();
+                  if (!data) return;
+
+                  const dataEmail = data.email ? String(data.email).toLowerCase().trim() : '';
+                  const dataUid = data.userId || data.uid || '';
+
+                  const isOwner = 
+                    (user.uid && dataUid === user.uid) || 
+                    (userEmail && dataEmail === userEmail);
+
+                  if (isOwner) {
+                    allFetchedItems.push({
+                      id: docSnap.id,
+                      sourceCollection: key,
+                      originalCollection: colName,
+                      typeLabel: 
+                        key === 'maintenance' ? 'طلب صيانة' :
+                        key === 'complaints' ? 'شكوى / اقتراح' :
+                        key === 'jobs' ? 'طلب توظيف' :
+                        key === 'offers' ? 'طلب عرض' :
+                        key === 'events' ? 'حجز حدث' :
+                        key === 'footer' ? 'رسالة الفوتر' : 'رسالة تواصل',
+                      ...data,
+                      parsedDate: parseSafeDate(data.createdAt || data.date || data.timestamp),
+                    });
+                  }
                 });
               }
-            });
-          } catch (err) {
-            console.error(`Error fetching from ${colName}:`, err);
+            } catch (err) {
+              console.error(`Error fetching from ${colName}:`, err);
+            }
           }
         }
 
-        allFetchedItems.sort((a, b) => b.parsedDate.getTime() - a.parsedDate.getTime());
-        setActivities(allFetchedItems);
+        const uniqueItems = Array.from(new Map(allFetchedItems.map(item => [item.id, item])).values());
+        uniqueItems.sort((a, b) => b.parsedDate.getTime() - a.parsedDate.getTime());
+        setActivities(uniqueItems);
       } catch (error) {
         console.error("Error fetching activities:", error);
         setActivities([]);
@@ -111,12 +145,14 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
     ? activities 
     : activities.filter((item) => item.sourceCollection === filter);
 
+  const excludeFields = ['id', 'sourceCollection', 'originalCollection', 'typeLabel', 'userId', 'uid', 'createdAt', 'date', 'timestamp', 'status', 'parsedDate', 'email', 'name', 'fullName', 'applicantName', 'phone', 'phoneNumber', 'mobile', 'message', 'note', 'details', 'coverLetter', 'address', 'location', 'city'];
+
   return (
     <div className="bg-card text-card-foreground rounded-3xl shadow-xl shadow-black/5 border border-border/80 p-6 sm:p-10 transition-all duration-300" dir="rtl">
       <div className="text-center sm:text-right mb-10">
         <h2 className="text-2xl sm:text-3xl font-black text-foreground mb-2 tracking-tight">طلبات الخدمات والأنشطة</h2>
         <p className="text-xs sm:text-sm font-semibold text-[#0ea5e9]">
-          تتبع حالة طلبات الصيانة، التوظيف، والشكاوى بكل سهولة. (انقر على أي طلب لعرض تفاصيله الكاملة)
+          تتبع حالة طلبات الصيانة، التوظيف، العروض، الأحداث، رسائل الفوتر، والشكاوى بكل سهولة عبر سجلك المرتبط بالبريد الإلكتروني.
         </p>
       </div>
 
@@ -139,12 +175,12 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
       {loading ? (
         <div className="bg-card text-card-foreground rounded-3xl p-12 text-center">
           <div className="inline-block w-6 h-6 border-2 border-[#0ea5e9] border-t-transparent rounded-full animate-spin mb-3"></div>
-          <p className="text-sm text-muted-foreground animate-pulse">جاري جلب الأنشطة والطلبات...</p>
+          <p className="text-sm text-muted-foreground animate-pulse">جاري جلب سجل الأنشطة والطلبات...</p>
         </div>
       ) : filteredActivities.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed border-border/80 rounded-3xl bg-muted/20">
           <p className="text-foreground font-bold text-base mb-2">لا توجد طلبات مسجلة بهذا القسم.</p>
-          <p className="text-xs text-muted-foreground">لم تقم بإرسال أي طلبات تطابق هذا التصنيف حتى الآن.</p>
+          <p className="text-xs text-muted-foreground">لم تقم بإرسال أي طلبات مطابقة لهذا التصنيف حتى الآن.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -184,21 +220,14 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
               <div className="bg-muted/40 rounded-xl p-4 text-sm text-foreground/90 font-medium space-y-2">
                 <p className="leading-relaxed line-clamp-2">
                   <strong className="text-muted-foreground ml-1">التفاصيل:</strong> 
-                  {activity.message || activity.note || activity.details || activity.coverLetter || 'لا توجد تفاصيل إضافية مسجلة.'}
+                  {activity.message || activity.note || activity.details || activity.coverLetter || activity.eventTitle || activity.offerName || 'لا توجد تفاصيل إضافية مسجلة.'}
                 </p>
-                {(activity.phone || activity.email || activity.phoneNumber) && (
-                  <div className="flex gap-4 pt-2 border-t border-border/50">
-                    {(activity.phone || activity.phoneNumber) && <p className="text-xs text-muted-foreground font-bold" dir="ltr">هاتف: {activity.phone || activity.phoneNumber}</p>}
-                    {activity.email && <p className="text-xs text-muted-foreground font-bold" dir="ltr">إيميل: {activity.email}</p>}
-                  </div>
-                )}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* نافذة تفاصيل الطلب (أسود ثابت تماماً Light/Dark) */}
       {selectedActivity && (
         <div onClick={() => setSelectedActivity(null)} className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div onClick={(e) => e.stopPropagation()} className="bg-neutral-900 border border-neutral-700 text-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl relative space-y-5 max-h-[90vh] overflow-y-auto" dir="rtl">
@@ -231,38 +260,61 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-neutral-800 p-4 rounded-2xl">
-                <div>
-                  <span className="text-neutral-400 text-xs block mb-1">الاسم المسجل:</span>
-                  <span className="font-bold text-white">{selectedActivity.name || selectedActivity.fullName || selectedActivity.applicantName || 'غير متوفر'}</span>
-                </div>
-                <div>
-                  <span className="text-neutral-400 text-xs block mb-1">رقم الهاتف:</span>
-                  <span className="font-bold text-white" dir="ltr">{selectedActivity.phone || selectedActivity.phoneNumber || selectedActivity.mobile || 'غير متوفر'}</span>
-                </div>
-              </div>
-
-              {(selectedActivity.email || selectedActivity.address || selectedActivity.location || selectedActivity.city) && (
+              {(selectedActivity.name || selectedActivity.fullName || selectedActivity.applicantName || selectedActivity.phone || selectedActivity.phoneNumber) && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-neutral-800 p-4 rounded-2xl">
-                  {selectedActivity.email && (
+                  {selectedActivity.name || selectedActivity.fullName || selectedActivity.applicantName ? (
                     <div>
-                      <span className="text-neutral-400 text-xs block mb-1">البريد الإلكتروني:</span>
-                      <span className="font-bold text-white" dir="ltr">{selectedActivity.email}</span>
+                      <span className="text-neutral-400 text-xs block mb-1">الاسم المسجل:</span>
+                      <span className="font-bold text-white">{selectedActivity.name || selectedActivity.fullName || selectedActivity.applicantName}</span>
                     </div>
-                  )}
-                  {(selectedActivity.address || selectedActivity.location || selectedActivity.city) && (
+                  ) : null}
+                  {selectedActivity.phone || selectedActivity.phoneNumber || selectedActivity.mobile ? (
                     <div>
-                      <span className="text-neutral-400 text-xs block mb-1">العنوان / الموقع:</span>
-                      <span className="font-bold text-white">{selectedActivity.address || selectedActivity.location || selectedActivity.city}</span>
+                      <span className="text-neutral-400 text-xs block mb-1">رقم الهاتف:</span>
+                      <span className="font-bold text-white" dir="ltr">{selectedActivity.phone || selectedActivity.phoneNumber || selectedActivity.mobile}</span>
                     </div>
-                  )}
+                  ) : null}
+                </div>
+              )}
+
+              {Object.keys(selectedActivity).some(key => !excludeFields.includes(key)) && (
+                <div className="bg-neutral-800/80 border border-neutral-700/60 p-4 rounded-2xl space-y-3">
+                  <span className="text-[#0ea5e9] text-xs block font-black border-b border-neutral-700 pb-2">الخيارات والحقول الإضافية المختارة:</span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {Object.entries(selectedActivity).map(([key, value]) => {
+                      if (excludeFields.includes(key)) return null;
+                      if (value === null || value === undefined) return null;
+
+                      let displayValue = '';
+                      if (Array.isArray(value)) {
+                        displayValue = value.join(', ');
+                      } else if (typeof value === 'object') {
+                        try {
+                          displayValue = JSON.stringify(value);
+                        } catch (e) {
+                          displayValue = '[بيانات معقدة]';
+                        }
+                      } else {
+                        displayValue = String(value);
+                      }
+
+                      if (!displayValue.trim()) return null;
+
+                      return (
+                        <div key={key} className="bg-neutral-900/50 p-2.5 rounded-xl border border-neutral-800">
+                          <span className="text-neutral-400 text-[11px] block capitalize mb-0.5">{key}:</span>
+                          <span className="font-bold text-white text-xs">{displayValue}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
               <div className="bg-neutral-800 p-4 rounded-2xl space-y-1">
                 <span className="text-neutral-400 text-xs block font-bold">التفاصيل الكاملة / الرسالة:</span>
                 <p className="text-white whitespace-pre-wrap leading-relaxed text-sm">
-                  {selectedActivity.message || selectedActivity.note || selectedActivity.details || selectedActivity.coverLetter || 'لا توجد تفاصيل إضافية مسجلة.'}
+                  {selectedActivity.message || selectedActivity.note || selectedActivity.details || selectedActivity.coverLetter || selectedActivity.eventTitle || selectedActivity.offerName || 'لا توجد تفاصيل إضافية مسجلة.'}
                 </p>
               </div>
 

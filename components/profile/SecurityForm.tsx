@@ -21,14 +21,17 @@ export const SecurityForm: React.FC<SecurityFormProps> = ({ user }) => {
     confirmNewPassword: '',
   });
 
+  // دالة مسؤولة عن فحص هل المستخدم مسجل بجيميل فقط ولم ينشئ كلمة مرور بعد
+  const checkIsGoogleOnly = (currentUser: User) => {
+    const providers = currentUser.providerData.map(p => p.providerId);
+    const hasPasswordProvider = providers.includes('password');
+    const isOnlyGoogle = providers.includes('google.com') && !hasPasswordProvider;
+    return isOnlyGoogle;
+  };
+
   useEffect(() => {
     if (user) {
-      // التحقق مما إذا كان موفر الخدمة الأساسي هو جوجل فقط ولم يتم إضافة كلمة مرور مسبقاً
-      const providers = user.providerData.map(p => p.providerId);
-      const hasPasswordProvider = providers.includes('password');
-      const isOnlyGoogle = providers.includes('google.com') && !hasPasswordProvider;
-      
-      setIsGoogleUser(isOnlyGoogle);
+      setIsGoogleUser(checkIsGoogleOnly(user));
     }
   }, [user]);
 
@@ -36,6 +39,12 @@ export const SecurityForm: React.FC<SecurityFormProps> = ({ user }) => {
     e.preventDefault();
     setSuccessMessage('');
     setErrorMessage('');
+
+    // التحقق من أن كلمة المرور الجديدة ليست نفس كلمة المرور الحالية (في حالة لم يكن مستخدم جوجل)
+    if (!isGoogleUser && passwords.currentPassword && passwords.newPassword === passwords.currentPassword) {
+      setErrorMessage('كلمة المرور الجديدة لا يمكن أن تكون هي نفسها كلمة المرور الحالية.');
+      return;
+    }
 
     if (passwords.newPassword.length < 6) {
       setErrorMessage('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل.');
@@ -68,8 +77,9 @@ export const SecurityForm: React.FC<SecurityFormProps> = ({ user }) => {
           }
         }
         
+        // تحديث الحالة فوراً بعد الربط الناجح لتعكس أن المستخدم أصبح يمتلك كلمة مرور الآن
         setIsGoogleUser(false);
-        setSuccessMessage('تم إنشاء وربط كلمة المرور بنجاح في النظام!');
+        setSuccessMessage('تم إنشاء وربط كلمة المرور بنجاح في النظام! يمكنك استخدامها لتغيير كلمة المرور لاحقاً.');
       } else {
         // المستخدم العادي أو من لديه كلمة مرور مسبقاً: نطلب كلمة المرور الحالية ونحدثها
         const credential = EmailAuthProvider.credential(user.email, passwords.currentPassword);
