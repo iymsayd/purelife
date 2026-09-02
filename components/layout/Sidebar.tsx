@@ -51,7 +51,7 @@ export default function Sidebar() {
         {/* 1. AI Button */}
         <button 
           title="شات بوت" 
-          onClick={() => alert('جاري فتح الشات الذكي لمساعدتك يا رياد! 🚀')}
+          onClick={() => alert('قريبا! ')}
           className="w-10 h-10 md:w-12 md:h-12 flex items-center justify-center bg-blue-600 text-white font-bold text-xs md:text-sm rounded-full hover:scale-110 transition-transform shadow-md cursor-pointer"
           aria-label="AI Chatbot"
         >
