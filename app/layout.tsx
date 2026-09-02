@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import "./globals.css";
 
 // استيراد المكون الوسيط
-import ConditionalLayout from '@/components/ConditionalLayout'; 
+import ConditionalLayout from '@/components/ui/ConditionalLayout'; 
 import { CartProvider } from './context/CartContext'; 
 import AnalyticsInitializer from '@/lib/AnalyticsInitializer';
 

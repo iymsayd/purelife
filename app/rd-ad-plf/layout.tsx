@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { X, LayoutDashboard, Package, ShoppingBag, MessageSquare, Newspaper, Users, Home, Info, SlidersHorizontal, Globe, Sun, Moon } from 'lucide-react';
-import AdminAuthProvider from '@/components/AdminAuthProvider';
+import AdminAuthProvider from '@/components/ui/AdminAuthProvider';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
