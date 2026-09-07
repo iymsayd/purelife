@@ -1,29 +1,43 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, MapPin, Calendar, Sparkles, CheckCircle2, ArrowLeft, Loader2, Info, Lock, Trash2, ChevronDown } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { saveUserMessage } from '@/lib/messageService';
 
-function InputField({ label, name, type, required, placeholder, value, onChange }: any) {
+interface InputFieldProps {
+  label: string;
+  name: string;
+  type: string;
+  required?: boolean;
+  placeholder: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  error?: string;
+  onBlur?: () => void;
+}
+
+function InputField({ label, name, type, required, placeholder, value, onChange, error, onBlur }: InputFieldProps) {
   return (
     <div className="text-right">
-      <label className="block text-sm font-bold mb-2">{label}</label>
+      <label className="block text-sm font-bold mb-2 text-[var(--foreground)]">{label}</label>
       <input 
         type={type} 
         name={name}
         required={required} 
         value={value}
         onChange={onChange}
+        onBlur={onBlur}
         placeholder={placeholder}
-        className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs text-sm font-semibold text-right"
+        className={`w-full p-3.5 rounded-2xl border bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs text-sm font-semibold text-right ${error ? 'border-red-500 focus:ring-red-500' : 'border-[var(--border)]'}`}
       />
+      {error && <span className="block text-xs font-bold text-red-500 mt-1.5">{error}</span>}
     </div>
   );
 }
 
-export default function EventClient({ event, allEvents, initialUserData }: { event: any; allEvents?: any[]; initialUserData?: any }) {
+export default function EventClient({ event, allEvents }: { event: any; allEvents?: any[]; initialUserData?: any }) {
   const [showModal, setShowModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState(false);
@@ -31,7 +45,6 @@ export default function EventClient({ event, allEvents, initialUserData }: { eve
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
 
-  // قائمة الأحداث الإضافية المختارة وحالة فتح/غلق القائمة المنسدلة
   const [selectedExtraEvents, setSelectedExtraEvents] = useState<string[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -42,6 +55,15 @@ export default function EventClient({ event, allEvents, initialUserData }: { eve
     address: '',
     email: '',
     message: ''
+  });
+
+  const [botField, setBotField] = useState('');
+
+  const [formErrors, setFormErrors] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    email: ''
   });
 
   useEffect(() => {
@@ -62,24 +84,24 @@ export default function EventClient({ event, allEvents, initialUserData }: { eve
       if (user) {
         setIsLoggedIn(true);
         setCurrentUserUid(user.uid);
-        let firestoreData: any = {};
         try {
           const userDocRef = doc(db, 'users', user.uid);
           const userDocSnap = await getDoc(userDocRef);
+          let firestoreData: any = {};
           if (userDocSnap.exists()) {
             firestoreData = userDocSnap.data();
           }
+
+          setFormDataState(prev => ({
+            ...prev,
+            name: firestoreData.name || firestoreData.fullname || user.displayName || prev.name,
+            email: user.email || firestoreData.email || prev.email,
+            phone: firestoreData.phone || user.phoneNumber || prev.phone,
+            address: firestoreData.address || prev.address,
+          }));
         } catch (err) {
           console.error("Error fetching user profile data:", err);
         }
-
-        setFormDataState(prev => ({
-          ...prev,
-          name: firestoreData.name || firestoreData.fullname || user.displayName || prev.name,
-          email: user.email || firestoreData.email || prev.email,
-          phone: firestoreData.phone || user.phoneNumber || prev.phone,
-          address: firestoreData.address || prev.address,
-        }));
       } else {
         setIsLoggedIn(false);
         setCurrentUserUid(null);
@@ -102,25 +124,47 @@ export default function EventClient({ event, allEvents, initialUserData }: { eve
     };
   }, []);
 
+  const validateField = useCallback((field: string, value: string, loggedInState: boolean) => {
+    let error = '';
+    if (field === 'name') {
+      if (!value.trim()) error = 'الاسم مطلوب.';
+      else if (value.trim().length < 3) error = 'الاسم يجب ألا يقل عن 3 أحرف.';
+    } else if (field === 'phone') {
+      const cleanPhone = value.replace(/\s+/g, '');
+      if (!cleanPhone) error = 'رقم الهاتف مطلوب.';
+      else if (cleanPhone.length < 10) error = 'رقم الهاتف غير صحيح (يجب ألا يقل عن 10 أرقام).';
+    } else if (field === 'address') {
+      if (!value.trim()) error = 'العنوان مطلوب.';
+      else if (value.trim().length < 5) error = 'يرجى كتابة العنوان بشكل مفصل وصحيح.';
+    } else if (field === 'email' && !loggedInState) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (value.trim() && !emailRegex.test(value)) error = 'البريد الإلكتروني غير صحيح.';
+    }
+    setFormErrors(prev => ({ ...prev, [field]: error }));
+  }, []);
+
   const handleFieldChange = (field: string, value: string) => {
     if (field === 'email' && isLoggedIn) return;
 
     if (field === 'phone') {
-      const filteredPhone = value.replace(/[^\d\s+\-()]/g, '');
-      const updated = { ...formDataState, phone: filteredPhone };
-      setFormDataState(updated);
-      if (!isLoggedIn) sessionStorage.setItem('event_form_draft', JSON.stringify(updated));
+      const filteredPhone = value.replace(/[^\d]/g, '').slice(0, 15);
+      setFormDataState(prev => {
+        const updated = { ...prev, phone: filteredPhone };
+        if (!isLoggedIn) sessionStorage.setItem('event_form_draft', JSON.stringify(updated));
+        return updated;
+      });
       if (isLoggedIn) setDataModified(true);
+      validateField('phone', filteredPhone, isLoggedIn);
       return;
     }
 
-    const updated = { ...formDataState, [field]: value };
-    setFormDataState(updated);
-    if (!isLoggedIn) sessionStorage.setItem('event_form_draft', JSON.stringify(updated));
-
-    if (isLoggedIn) {
-      setDataModified(true);
-    }
+    setFormDataState(prev => {
+      const updated = { ...prev, [field]: value };
+      if (!isLoggedIn) sessionStorage.setItem('event_form_draft', JSON.stringify(updated));
+      return updated;
+    });
+    if (isLoggedIn) setDataModified(true);
+    validateField(field, value, isLoggedIn);
   };
 
   const toggleExtraEvent = (eventTitle: string) => {
@@ -133,12 +177,28 @@ export default function EventClient({ event, allEvents, initialUserData }: { eve
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (botField) {
+      console.warn("Spam detected via honeypot.");
+      return;
+    }
+
+    validateField('name', formDataState.name, isLoggedIn);
+    validateField('phone', formDataState.phone, isLoggedIn);
+    validateField('address', formDataState.address, isLoggedIn);
+    if (!isLoggedIn) validateField('email', formDataState.email, isLoggedIn);
+
+    if (formErrors.name || formErrors.phone || formErrors.address || formErrors.email) {
+      alert("يرجى تصحيح الأخطاء الموجودة في الحقول قبل إرسال الحجز.");
+      return;
+    }
+
     setSubmitting(true);
 
     const formElement = e.currentTarget;
     const dataToSend = new FormData(formElement);
     
-    const finalEmail = isLoggedIn && formDataState.email ? formDataState.email : formDataState.email;
+    const finalEmail = formDataState.email;
     if (finalEmail) {
       dataToSend.set('email', finalEmail);
     }
@@ -167,15 +227,16 @@ export default function EventClient({ event, allEvents, initialUserData }: { eve
         sessionStorage.removeItem('event_form_draft');
       }
 
-      await saveUserMessage('events', {
+      await saveUserMessage('event_bookings', {
         title: `حجز أحداث: ${allBookedEventsTitles}`,
         name: formDataState.name,
         phone: formDataState.phone,
         address: formDataState.address,
-        email: finalEmail,
+        email: finalEmail || 'بدون بريد',
         eventTitle: allBookedEventsTitles,
         message: formDataState.message || 'لا توجد ملاحظات إضافية',
-      }, isLoggedIn ? currentUserUid : null);
+        userId: isLoggedIn && currentUserUid ? currentUserUid : 'زائر (بدون حساب)'
+      });
 
       if (isLoggedIn && currentUserUid) {
         try {
@@ -226,9 +287,7 @@ export default function EventClient({ event, allEvents, initialUserData }: { eve
         {event.location && (
           <div className="flex items-center justify-center gap-2 text-base md:text-lg font-bold opacity-80">
             <MapPin size={20} className="text-[var(--secondary)]" />
-            <span className={event.location.includes('طنطا') ? "text-[var(--secondary)] font-extrabold" : ""}>
-              {event.location}
-            </span>
+            <span>{event.location}</span>
           </div>
         )}
         <p className="font-medium max-w-3xl mx-auto text-lg md:text-xl leading-relaxed opacity-85">{event.desc}</p>
@@ -329,37 +388,56 @@ export default function EventClient({ event, allEvents, initialUserData }: { eve
                 )}
 
                 <form className="space-y-5" onSubmit={handleSubmit}>
+                  <div className="hidden" aria-hidden="true">
+                    <input 
+                      type="text" 
+                      name="botcheck" 
+                      value={botField} 
+                      onChange={(e) => setBotField(e.target.value)} 
+                      tabIndex={-1} 
+                      autoComplete="off" 
+                    />
+                  </div>
+
                   <InputField 
                     label="الاسم بالكامل" 
                     name="name" 
                     type="text" 
                     required 
                     value={formDataState.name}
-                    onChange={(e: any) => handleFieldChange('name', e.target.value)}
+                    onChange={(e) => handleFieldChange('name', e.target.value)}
+                    onBlur={() => validateField('name', formDataState.name, isLoggedIn)}
                     placeholder="أدخل اسمك الكامل" 
+                    error={formErrors.name}
                   />
+
                   <InputField 
                     label="رقم الهاتف" 
                     name="phone" 
                     type="tel" 
                     required 
                     value={formDataState.phone}
-                    onChange={(e: any) => handleFieldChange('phone', e.target.value)}
-                    placeholder="01xxxxxxxx" 
+                    onChange={(e) => handleFieldChange('phone', e.target.value)}
+                    onBlur={() => validateField('phone', formDataState.phone, isLoggedIn)}
+                    placeholder="أدخل رقم الهاتف" 
+                    error={formErrors.phone}
                   />
+
                   <InputField 
                     label="العنوان بالتفصيل" 
                     name="address" 
                     type="text" 
                     required 
                     value={formDataState.address}
-                    onChange={(e: any) => handleFieldChange('address', e.target.value)}
+                    onChange={(e) => handleFieldChange('address', e.target.value)}
+                    onBlur={() => validateField('address', formDataState.address, isLoggedIn)}
                     placeholder="المدينة، الحي، الشارع" 
+                    error={formErrors.address}
                   />
 
                   <div className="text-right">
                     <div className="flex items-center justify-between mb-2">
-                      <label className="block text-sm font-bold mb-1">
+                      <label className="block text-sm font-bold mb-1 text-[var(--foreground)]">
                         البريد الإلكتروني {!isLoggedIn && <span className="text-xs opacity-60 font-normal">(اختياري)</span>}
                       </label>
                       {isLoggedIn && (
@@ -374,9 +452,11 @@ export default function EventClient({ event, allEvents, initialUserData }: { eve
                       value={formDataState.email}
                       disabled={isLoggedIn}
                       onChange={(e) => handleFieldChange('email', e.target.value)}
+                      onBlur={() => !isLoggedIn && validateField('email', formDataState.email, isLoggedIn)}
                       placeholder="name@example.com"
-                      className={`w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs text-sm font-semibold text-right ${isLoggedIn ? 'opacity-75 cursor-not-allowed bg-[var(--secondary)]/5' : ''}`}
+                      className={`w-full p-3.5 rounded-2xl border bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs text-sm font-semibold text-right ${formErrors.email ? 'border-red-500' : 'border-[var(--border)]'} ${isLoggedIn ? 'opacity-75 cursor-not-allowed bg-[var(--secondary)]/5' : ''}`}
                     />
+                    {formErrors.email && <span className="block text-xs font-bold text-red-500 mt-1.5">{formErrors.email}</span>}
                   </div>
 
                   {otherEvents.length > 0 && (
@@ -442,11 +522,11 @@ export default function EventClient({ event, allEvents, initialUserData }: { eve
                   )}
 
                   <div className="text-right">
-                    <label className="block text-sm font-bold mb-2">رسالة إضافية (اختياري)</label>
+                    <label className="block text-sm font-bold mb-2 text-[var(--foreground)]">رسالة إضافية (اختياري)</label>
                     <textarea 
                       name="message" 
                       value={formDataState.message}
-                      onChange={(e) => handleFieldChange('message', e.target.value)}
+                      onChange={(e) => setFormDataState(prev => ({ ...prev, message: e.target.value }))}
                       className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs resize-none min-h-[100px] text-sm font-semibold text-right" 
                       placeholder="أكتب ملاحظاتك..."
                     ></textarea>

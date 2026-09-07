@@ -1,8 +1,8 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
-import { Plus, Trash2, Edit3, Image as ImageIcon, Link as LinkIcon, Upload, Loader2, BookOpen, Tag, CheckCircle, CalendarDays } from 'lucide-react';
+import { Plus, Trash2, Edit3, Image as ImageIcon, Link as LinkIcon, Upload, Loader2, BookOpen, Tag, CheckCircle, CalendarDays, ChevronRight, ChevronLeft } from 'lucide-react';
 
 export default function ContentManager() {
   const [activeTab, setActiveTab] = useState<'blogs' | 'offers' | 'events'>('blogs');
@@ -15,7 +15,11 @@ export default function ContentManager() {
   const [imageInputType, setImageInputType] = useState<'url' | 'file'>('url');
   const [uploadingImg, setUploadingImg] = useState(false);
 
-  // نظام التنبيهات المخصص (بدل المتصفح)
+  // نظام التصفح (Pagination)
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  // نظام التنبيهات المخصص
   const [alertModal, setAlertModal] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
   const [confirmModal, setConfirmModal] = useState<{ show: boolean; title: string; message: string; onConfirm: () => void }>({
     show: false,
@@ -39,9 +43,9 @@ export default function ContentManager() {
 
   useEffect(() => {
     fetchData();
+    setCurrentPage(1); // إعادة التعيين للصفحة الأولى عند تبديل الأقسام
   }, [activeTab]);
 
-  // إغلاق النوافذ المنبثقة بـ Esc
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -74,6 +78,14 @@ export default function ContentManager() {
     }
   };
 
+  // حساب العناصر الحالية للصفحة النشطة
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return items.slice(start, start + itemsPerPage);
+  }, [items, currentPage]);
+
+  const totalPages = Math.ceil(items.length / itemsPerPage);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -97,7 +109,6 @@ export default function ContentManager() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // التحقق الإجباري الشامل حسب القسم النشط
     if (!formData.title.trim()) {
       setAlertModal({ show: true, message: "الرجاء إدخال عنوان العنصر." });
       return;
@@ -109,17 +120,17 @@ export default function ContentManager() {
 
     if (activeTab === 'blogs') {
       if (!formData.category.trim() || !formData.summary.trim() || !formData.content.trim()) {
-        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول المقال الإجبارية (التصنيف، الملخص، ومحتوى المقال)." });
+        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول المقال الإجبارية." });
         return;
       }
     } else if (activeTab === 'offers') {
       if (!formData.discount.trim() || !formData.desc.trim()) {
-        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول العرض الإجبارية (قيمة الخصم ووصف العرض)." });
+        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول العرض الإجبارية." });
         return;
       }
     } else if (activeTab === 'events') {
       if (!formData.date.trim() || !formData.location.trim() || !formData.desc.trim()) {
-        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول الحدث الإجبارية (تاريخ الحدث، مكان الحدث، ووصف الحدث)." });
+        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول الحدث الإجبارية." });
         return;
       }
     }
@@ -239,37 +250,37 @@ export default function ContentManager() {
   };
 
   return (
-    <div dir="rtl" className="max-w-6xl mx-auto text-foreground pb-20 px-4 sm:px-6">
+    <div dir="rtl" className="max-w-6xl mx-auto text-foreground pb-20 px-4 sm:px-6 transition-colors duration-300">
       
-      {/* تبديل القسم بين المدونة، العروض، والفعاليات */}
+      {/* تبديل الأقسام */}
       <div className="flex flex-wrap gap-3 mb-8 border-b border-border pb-4">
         <button
           onClick={() => { setActiveTab('blogs'); resetForm(); }}
-          className={`px-6 py-3 rounded-2xl font-bold text-sm transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'blogs' ? 'bg-[var(--secondary)] text-white shadow-md' : 'bg-muted/50 hover:bg-muted text-muted-foreground'}`}
+          className={`px-5 py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm ${activeTab === 'blogs' ? 'bg-[var(--secondary)] text-white scale-[1.02]' : 'bg-muted/50 hover:bg-muted text-muted-foreground'}`}
           type="button"
         >
-          <BookOpen size={18} /> إدارة المقالات (المدونة)
+          <BookOpen size={18} /> إدارة المقالات
         </button>
         <button
           onClick={() => { setActiveTab('offers'); resetForm(); }}
-          className={`px-6 py-3 rounded-2xl font-bold text-sm transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'offers' ? 'bg-[var(--secondary)] text-white shadow-md' : 'bg-muted/50 hover:bg-muted text-muted-foreground'}`}
+          className={`px-5 py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm ${activeTab === 'offers' ? 'bg-[var(--secondary)] text-white scale-[1.02]' : 'bg-muted/50 hover:bg-muted text-muted-foreground'}`}
           type="button"
         >
-          <Tag size={18} /> إدارة العروض والخصومات
+          <Tag size={18} /> إدارة العروض
         </button>
         <button
           onClick={() => { setActiveTab('events'); resetForm(); }}
-          className={`px-6 py-3 rounded-2xl font-bold text-sm transition-all flex items-center gap-2 cursor-pointer ${activeTab === 'events' ? 'bg-[var(--secondary)] text-white shadow-md' : 'bg-muted/50 hover:bg-muted text-muted-foreground'}`}
+          className={`px-5 py-3 rounded-2xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 cursor-pointer shadow-sm ${activeTab === 'events' ? 'bg-[var(--secondary)] text-white scale-[1.02]' : 'bg-muted/50 hover:bg-muted text-muted-foreground'}`}
           type="button"
         >
-          <CalendarDays size={18} /> إدارة الأحداث والفعاليات
+          <CalendarDays size={18} /> إدارة الفعاليات
         </button>
       </div>
 
-      {/* نموذج الإضافة أو التعديل */}
-      <form onSubmit={handleSave} className="border border-border rounded-3xl shadow-sm p-6 md:p-8 mb-12 text-foreground bg-card">
+      {/* نموذج الإضافة والتعديل */}
+      <form onSubmit={handleSave} className="border border-border rounded-3xl shadow-sm p-6 md:p-8 mb-12 bg-card text-card-foreground">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-bold flex items-center gap-2 text-[var(--secondary)]">
+          <h2 className="text-base sm:text-lg font-bold flex items-center gap-2 text-[var(--secondary)]">
             {editingId ? `تعديل ${getTabTitle()}` : `إضافة ${getTabTitle()} جديد`}
           </h2>
           {editingId && (
@@ -280,7 +291,7 @@ export default function ContentManager() {
         </div>
 
         {success && (
-          <div className="mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 font-bold text-sm flex items-center gap-2">
+          <div className="mb-6 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold text-sm flex items-center gap-2">
             <CheckCircle size={18} /> تم الحفظ بنجاح!
           </div>
         )}
@@ -292,7 +303,7 @@ export default function ContentManager() {
               type="text" 
               value={formData.title}
               onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder={activeTab === 'blogs' ? 'عنوان المقال...' : activeTab === 'offers' ? 'عنوان العرض...' : 'عنوان الحدث...'}
+              placeholder="اكتب العنوان هنا..."
               className="w-full p-3.5 rounded-2xl border border-border bg-background text-foreground text-sm outline-none focus:border-[var(--secondary)] transition-all"
             />
           </div>
@@ -314,7 +325,7 @@ export default function ContentManager() {
               <select 
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full p-3.5 rounded-2xl border border-border bg-[var(--background)] text-foreground text-sm outline-none focus:border-[var(--secondary)] transition-all cursor-pointer"
+                className="w-full p-3.5 rounded-2xl border border-border bg-background text-foreground text-sm outline-none focus:border-[var(--secondary)] transition-all cursor-pointer"
               >
                 <option value="فلاتر">فلاتر</option>
                 <option value="تكييفات">تكييفات</option>
@@ -325,7 +336,7 @@ export default function ContentManager() {
 
           {activeTab === 'offers' && (
             <div>
-              <label className="block text-xs font-bold mb-2">قيمة الخصم (مثال: 20% أو 500 جنيه) *</label>
+              <label className="block text-xs font-bold mb-2">قيمة الخصم *</label>
               <input 
                 type="text" 
                 value={formData.discount}
@@ -339,7 +350,7 @@ export default function ContentManager() {
           {activeTab === 'events' && (
             <>
               <div>
-                <label className="block text-xs font-bold mb-2">تاريخ الحدث (مثال: 15 يونيو 2026) *</label>
+                <label className="block text-xs font-bold mb-2">تاريخ الحدث *</label>
                 <input 
                   type="text" 
                   value={formData.date}
@@ -349,12 +360,12 @@ export default function ContentManager() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold mb-2">مكان الحدث (مثال: طنطا، شارع الاستاد) *</label>
+                <label className="block text-xs font-bold mb-2">مكان الحدث *</label>
                 <input 
                   type="text" 
                   value={formData.location}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  placeholder="طنطا، شارع الاستاد"
+                  placeholder="القاهرة، شارع الهرم"
                   className="w-full p-3.5 rounded-2xl border border-border bg-background text-foreground text-sm outline-none focus:border-[var(--secondary)] transition-all"
                 />
               </div>
@@ -391,19 +402,17 @@ export default function ContentManager() {
                 className="w-full p-3.5 rounded-2xl border border-border bg-background text-foreground text-sm outline-none focus:border-[var(--secondary)] transition-all"
               />
             ) : (
-              <div className="flex items-center gap-4">
-                <label className="flex-1 flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-2xl cursor-pointer hover:border-[var(--secondary)] transition-all bg-background">
-                  {uploadingImg ? (
-                    <Loader2 className="animate-spin text-[var(--secondary)]" size={24} />
-                  ) : (
-                    <>
-                      <Upload size={24} className="text-muted-foreground mb-2" />
-                      <span className="text-xs font-bold text-muted-foreground">اختر صورة من جهازك (أقل من 2 ميجابايت)</span>
-                    </>
-                  )}
-                  <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-                </label>
-              </div>
+              <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-2xl cursor-pointer hover:border-[var(--secondary)] transition-all bg-background">
+                {uploadingImg ? (
+                  <Loader2 className="animate-spin text-[var(--secondary)]" size={24} />
+                ) : (
+                  <>
+                    <Upload size={24} className="text-muted-foreground mb-2" />
+                    <span className="text-xs font-bold text-muted-foreground">اختر صورة من جهازك (أقل من 2 ميجابايت)</span>
+                  </>
+                )}
+                <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+              </label>
             )}
 
             {formData.image && (
@@ -415,7 +424,7 @@ export default function ContentManager() {
 
           {(activeTab === 'offers' || activeTab === 'events') && (
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold mb-2">وصف مختصر (نبذة) *</label>
+              <label className="block text-xs font-bold mb-2">وصف مختصر *</label>
               <textarea 
                 rows={3}
                 value={formData.desc}
@@ -429,7 +438,7 @@ export default function ContentManager() {
           {activeTab === 'blogs' && (
             <>
               <div className="md:col-span-2">
-                <label className="block text-xs font-bold mb-2">الملخص (النبذة التعريفية) *</label>
+                <label className="block text-xs font-bold mb-2">الملخص *</label>
                 <textarea 
                   rows={3}
                   value={formData.summary}
@@ -465,9 +474,9 @@ export default function ContentManager() {
         </div>
       </form>
 
-      {/* قائمة العناصر الحالية */}
-      <div className="border border-border rounded-3xl shadow-sm p-6 md:p-8 text-foreground bg-card">
-        <h3 className="text-lg font-bold mb-6">
+      {/* قائمة العناصر الحالية مع نظام الـ Pagination (10 لكل صفحة) */}
+      <div className="border border-border rounded-3xl shadow-sm p-6 md:p-8 bg-card text-card-foreground">
+        <h3 className="text-base sm:text-lg font-bold mb-6">
           قائمة {activeTab === 'blogs' ? 'المقالات' : activeTab === 'offers' ? 'العروض' : 'الفعاليات'} الحالية ({items.length})
         </h3>
 
@@ -478,113 +487,96 @@ export default function ContentManager() {
         ) : items.length === 0 ? (
           <p className="text-center text-muted-foreground py-12 text-sm font-semibold">لا توجد عناصر مضافة حتى الآن.</p>
         ) : (
-          <div className="space-y-4">
-            {items.map((item) => (
-              <div key={item.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl border border-border bg-muted/20 gap-4">
-                <div className="flex items-center gap-4">
-                  {item.image ? (
-                    <img src={item.image} alt={item.title} className="w-16 h-16 rounded-xl object-cover shrink-0" />
-                  ) : (
-                    <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center shrink-0">
-                      <ImageIcon size={24} className="text-muted-foreground" />
+          <>
+            <div className="space-y-4">
+              {paginatedItems.map((item) => (
+                <div key={item.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl border border-border bg-muted/20 gap-4 transition-all hover:bg-muted/40">
+                  <div className="flex items-center gap-4 w-full sm:w-auto">
+                    {item.image ? (
+                      <img src={item.image} alt={item.title} className="w-16 h-16 rounded-xl object-cover shrink-0 border border-border" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center shrink-0 border border-border">
+                        <ImageIcon size={24} className="text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="overflow-hidden">
+                      <h4 className="font-bold text-sm sm:text-base mb-1 text-foreground truncate">{item.title}</h4>
+                      <p className="text-xs text-muted-foreground line-clamp-1">{item.summary || item.desc || item.date || 'بدون وصف'}</p>
                     </div>
-                  )}
-                  <div>
-                    <h4 className="font-bold text-base mb-1 text-foreground">{item.title}</h4>
-                    <p className="text-xs text-muted-foreground line-clamp-1">{item.summary || item.desc || item.date || 'بدون وصف'}</p>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                    <button
+                      onClick={() => handleEdit(item)}
+                      className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition-all cursor-pointer font-bold text-xs flex items-center gap-1"
+                      type="button"
+                    >
+                      <Edit3 size={15} /> تعديل
+                    </button>
+                    <button
+                      onClick={() => handleDeleteConfirm(item.id)}
+                      className="p-2.5 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/30 hover:bg-rose-500/20 transition-all cursor-pointer font-bold text-xs flex items-center gap-1"
+                      type="button"
+                    >
+                      <Trash2 size={15} /> حذف
+                    </button>
                   </div>
                 </div>
+              ))}
+            </div>
 
-                <div className="flex items-center gap-2 self-end sm:self-center">
-                  <button
-                    onClick={() => handleEdit(item)}
-                    className="p-2.5 rounded-xl bg-amber-500/10 text-amber-600 border border-amber-500/30 hover:bg-amber-500/20 transition-all cursor-pointer font-bold text-xs flex items-center gap-1"
-                    type="button"
-                    title="تعديل"
-                  >
-                    <Edit3 size={16} /> تعديل
-                  </button>
-                  <button
-                    onClick={() => handleDeleteConfirm(item.id)}
-                    className="p-2.5 rounded-xl bg-rose-500/10 text-rose-600 border border-rose-500/30 hover:bg-rose-500/20 transition-all cursor-pointer font-bold text-xs flex items-center gap-1"
-                    type="button"
-                    title="حذف"
-                  >
-                    <Trash2 size={16} /> حذف
-                  </button>
-                </div>
+            {/* أزرار التنقل بين الصفحات (Pagination Controls) */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-8 pt-4 border-t border-border">
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-4 py-2 rounded-xl border border-border bg-background text-foreground text-xs font-bold flex items-center gap-1 disabled:opacity-40 cursor-pointer hover:bg-muted transition"
+                  type="button"
+                >
+                  <ChevronRight size={16} /> السابق
+                </button>
+                <span className="text-xs font-bold text-muted-foreground">
+                  الصفحة {currentPage} من {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-4 py-2 rounded-xl border border-border bg-background text-foreground text-xs font-bold flex items-center gap-1 disabled:opacity-40 cursor-pointer hover:bg-muted transition"
+                  type="button"
+                >
+                  التالي <ChevronLeft size={16} />
+                </button>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </div>
 
-      {/* نافذة التنبيه المخصصة (Alert Modal) */}
+      {/* نافذة التنبيه (Alert Modal) */}
       {alertModal.show && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm"
-          onClick={() => setAlertModal({ show: false, message: '' })}
-        >
-          <div 
-            className="bg-[var(--background)] border border-[var(--border)] p-6 rounded-[2rem] shadow-2xl max-w-sm w-full text-center relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button 
-              onClick={() => setAlertModal({ show: false, message: '' })}
-              className="absolute top-4 left-4 w-8 h-8 rounded-full bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] text-sm font-black flex items-center justify-center hover:bg-red-500 hover:text-white transition cursor-pointer"
-              type="button"
-            >
-              ✕
-            </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm" onClick={() => setAlertModal({ show: false, message: '' })}>
+          <div className="bg-card border border-border p-6 rounded-[2rem] shadow-2xl max-w-sm w-full text-center relative text-card-foreground" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setAlertModal({ show: false, message: '' })} className="absolute top-4 left-4 w-8 h-8 rounded-full bg-muted border border-border text-foreground text-sm font-black flex items-center justify-center hover:bg-rose-500 hover:text-white transition cursor-pointer" type="button">✕</button>
             <div className="text-3xl mb-3">⚠️</div>
-            <h3 className="text-lg font-black text-[var(--foreground)] mb-2">تنبيه هام</h3>
-            <p className="text-sm text-[var(--muted-foreground)] mb-6">{alertModal.message}</p>
-            <button
-              onClick={() => setAlertModal({ show: false, message: '' })}
-              className="w-full bg-[var(--secondary)] text-white py-3 rounded-xl font-bold cursor-pointer hover:opacity-90 transition"
-              type="button"
-            >
-              حسناً
-            </button>
+            <h3 className="text-lg font-black mb-2">تنبيه هام</h3>
+            <p className="text-sm text-muted-foreground mb-6">{alertModal.message}</p>
+            <button onClick={() => setAlertModal({ show: false, message: '' })} className="w-full bg-[var(--secondary)] text-white py-3 rounded-xl font-bold cursor-pointer hover:opacity-90 transition" type="button">حسناً</button>
           </div>
         </div>
       )}
 
-      {/* نافذة التأكيد المخصصة للحذف (Confirm Modal) */}
+      {/* نافذة تأكيد الحذف (Confirm Modal) */}
       {confirmModal.show && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm"
-          onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))}
-        >
-          <div 
-            className="bg-[var(--background)] border border-[var(--border)] p-6 rounded-[2rem] shadow-2xl max-w-sm w-full text-center relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button 
-              onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))}
-              className="absolute top-4 left-4 w-8 h-8 rounded-full bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] text-sm font-black flex items-center justify-center hover:bg-red-500 hover:text-white transition cursor-pointer"
-              type="button"
-            >
-              ✕
-            </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-sm" onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))}>
+          <div className="bg-card border border-border p-6 rounded-[2rem] shadow-2xl max-w-sm w-full text-center relative text-card-foreground" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))} className="absolute top-4 left-4 w-8 h-8 rounded-full bg-muted border border-border text-foreground text-sm font-black flex items-center justify-center hover:bg-rose-500 hover:text-white transition cursor-pointer" type="button">✕</button>
             <div className="text-3xl mb-3">🗑️</div>
-            <h3 className="text-lg font-black text-[var(--foreground)] mb-2">{confirmModal.title}</h3>
-            <p className="text-sm text-[var(--muted-foreground)] mb-6">{confirmModal.message}</p>
+            <h3 className="text-lg font-black mb-2">{confirmModal.title}</h3>
+            <p className="text-sm text-muted-foreground mb-6">{confirmModal.message}</p>
             <div className="flex gap-2">
-              <button
-                onClick={confirmModal.onConfirm}
-                className="flex-1 bg-[var(--secondary)] text-white py-3 rounded-xl font-bold cursor-pointer hover:opacity-90 transition"
-                type="button"
-              >
-                تأكيد الحذف
-              </button>
-              <button
-                onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))}
-                className="flex-1 bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] py-3 rounded-xl font-bold cursor-pointer hover:bg-[var(--border)]/50 transition"
-                type="button"
-              >
-                إلغاء
-              </button>
+              <button onClick={confirmModal.onConfirm} className="flex-1 bg-rose-600 text-white py-3 rounded-xl font-bold cursor-pointer hover:opacity-90 transition" type="button">تأكيد الحذف</button>
+              <button onClick={() => setConfirmModal(prev => ({ ...prev, show: false }))} className="flex-1 bg-muted border border-border text-foreground py-3 rounded-xl font-bold cursor-pointer hover:bg-muted/80 transition" type="button">إلغاء</button>
             </div>
           </div>
         </div>

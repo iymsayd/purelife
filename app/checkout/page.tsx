@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useCart } from '@/app/context/CartContext'; 
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc, updateDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { saveUserMessage } from '@/lib/messageService';
 import { ShieldCheck, MapPin, Phone, User as UserIcon, Mail, ShoppingBag, ArrowRight, CheckCircle2, LogIn, UserPlus, X, AlertCircle, Globe } from 'lucide-react';
 
 export default function CheckoutPage() {
@@ -30,6 +31,10 @@ export default function CheckoutPage() {
   const [address, setAddress] = useState('');
   const [governorate, setGovernorate] = useState('');
   const [country, setCountry] = useState('مصر');
+
+  // حالات أخطاء التحقق (Validation & Anti-Spam Errors)
+  const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
+  const [lastSubmitTime, setLastSubmitTime] = useState<number>(0);
 
   // تفعيل زر Esc لإغلاق النافذة المنبثقة للـ Auth
   useEffect(() => {
@@ -99,17 +104,57 @@ export default function CheckoutPage() {
     return item.titleAr || item.nameAr || item.title || item.name || 'منتج بدون اسم';
   };
 
-  // إرسال الطلب وتحديث بيانات اليوزر الفعلية
+  // دالة تنظيف المدخلات لحماية البيانات ضد الـ Spam وحقن الكود (Sanitization)
+  const sanitizeInput = (input: string) => {
+    return input.replace(/<[^>]*>?/gm, '').trim();
+  };
+
+  // دالة التحقق من صحة الفورم (Form Validation) بالنص المطلوب تماماً
+  const validateForm = () => {
+    const errors: { [key: string]: string } = {};
+    const cleanName = sanitizeInput(name);
+    const cleanPhone = sanitizeInput(phone);
+    const cleanAddress = sanitizeInput(address);
+
+    // التحقق من الاسم (ألا يقل عن 3 أحرف أو يحتوي على رموز خبيثة)
+    if (!cleanName || cleanName.length < 3 || /[<>/\\]/.test(name)) {
+      errors.name = 'الاسم يجب ألا يقل عن 3 أحرف.';
+    }
+
+    // التحقق من رقم الهاتف المصري (يبدأ بـ 01 ويحتوي على 11 رقماً صحيحاً)
+    const egyptianPhoneRegex = /^01[0125][0-9]{8}$/;
+    if (!cleanPhone || !egyptianPhoneRegex.test(cleanPhone)) {
+      errors.phone = 'رقم الهاتف غير صحيح (يجب ألا يقل عن 10 أرقام).';
+    }
+
+    // التحقق من العنوان بالتفصيل
+    if (!cleanAddress || cleanAddress.length < 5) {
+      errors.address = 'يرجى كتابة العنوان بشكل مفصل وصحيح.';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // إرسال الطلب وتحديث بيانات اليوزر الفعلية وإرساله لجوجل شيت عبر messageService
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 1. فحص منع السبام (Rate Limiting محلي لمنع الضغط المتكرر في أقل من 5 ثواني)
+    const now = Date.now();
+    if (now - lastSubmitTime < 5000) {
+      alert("برجاء الانتظار قليلاً قبل إعادة إرسال الطلب لمنع التكرار (Spam Protection).");
+      return;
+    }
+
     if (!user) {
       localStorage.setItem('redirectAfterLogin', window.location.pathname);
       setShowAuthModal(true);
       return;
     }
 
-    if (!name.trim() || !phone.trim() || !address.trim()) {
-      alert("برجاء استكمال جميع الخانات المطلوبة!");
+    // 2. تفعيل الفاليديشن
+    if (!validateForm()) {
       return;
     }
 
@@ -120,20 +165,25 @@ export default function CheckoutPage() {
     }
 
     setSubmitting(true);
+    setLastSubmitTime(now);
 
     try {
-      // 1. تحديث بيانات اليوزر في الداتا (تحديث حقيقي مثل الـ Profile)
+      const cleanName = sanitizeInput(name);
+      const cleanPhone = sanitizeInput(phone);
+      const cleanAddress = sanitizeInput(address);
+
+      // 3. تحديث بيانات اليوزر في الداتا بأمان
       const userDocRef = doc(db, 'users', user.uid);
       await updateDoc(userDocRef, {
-        name,
-        phone,
-        address,
+        name: cleanName,
+        phone: cleanPhone,
+        address: cleanAddress,
         governorate,
         country,
         updatedAt: serverTimestamp(),
       });
 
-      // 2. تجهيز عناصر الطلب
+      // 4. تجهيز عناصر الطلب
       const formattedItems = cartItems.map((item) => ({
         id: item.id || '',
         title: getLocalizedItemTitle(item),
@@ -143,16 +193,25 @@ export default function CheckoutPage() {
         image: item.image || '',
       }));
 
-      // 3. إضافة الطلب لجدول الـ orders
-      await addDoc(collection(db, 'orders'), {
+      // نص منسق تفصيلي للمنتجات ليظهر بشكل احترافي في الشيت والرسائل
+      const itemsSummaryText = formattedItems
+        .map(item => `- ${item.title} (الكمية: ${item.quantity} | السعر: ${item.price} ج.م | النوع: ${item.type})`)
+        .join(' | ');
+
+      // 5. إرسال الطلب عبر دالة saveUserMessage الموحدة (لتحفظ بـ فايربيس وترسل لجوجل شيت تلقائياً)
+      await saveUserMessage('orders', {
         userId: user.uid,
-        customerName: name,
-        phone,
-        address: `${governorate} - ${address}`,
+        name: cleanName,
+        fullName: cleanName,
+        phone: cleanPhone,
+        email: email,
+        title: `طلب شراء جديد - إجمالي: ${totalAmount} ج.م`,
+        address: `${governorate} - ${cleanAddress}`,
+        message: itemsSummaryText,
         items: formattedItems,
         totalAmount: totalAmount || 0,
         status: 'pending',
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toLocaleString(),
       });
 
       clearCart();
@@ -171,7 +230,7 @@ export default function CheckoutPage() {
     }
   };
 
-  // شاشة نافذة تسجيل الدخول لو المستخدم مش مسجل (لمنع مشاكل الهيدريشن)
+  // شاشة نافذة تسجيل الدخول لو المستخدم مش مسجل
   if (!user) {
     return (
       <main className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative" dir="rtl">
@@ -216,12 +275,12 @@ export default function CheckoutPage() {
               >
                 العودة للرئيسية
               </button>
-            </div>
-          </div>
         </div>
-      </main>
-    );
-  }
+      </div>
+    </div>
+    </main>
+  );
+}
 
   if (success) {
     return (
@@ -271,7 +330,7 @@ export default function CheckoutPage() {
               </span>
             </div>
 
-            <form onSubmit={handleSubmitOrder} className="space-y-4">
+            <form onSubmit={handleSubmitOrder} className="space-y-4" noValidate>
               <div>
                 <label className="block text-sm font-bold mb-2 text-foreground/90">الاسم الكامل *</label>
                 <div className="relative">
@@ -280,13 +339,18 @@ export default function CheckoutPage() {
                   </span>
                   <input
                     type="text"
-                    required
                     value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    className="w-full pr-11 pl-4 py-3 rounded-2xl border border-border/80 bg-secondary/5 text-foreground focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500 text-sm outline-none transition-all shadow-xs"
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (formErrors.name) setFormErrors({ ...formErrors, name: '' });
+                    }}
+                    className={`w-full pr-11 pl-4 py-3 rounded-2xl border bg-secondary/5 text-foreground focus:ring-2 text-sm outline-none transition-all shadow-xs ${
+                      formErrors.name ? 'border-red-500 focus:ring-red-500/50' : 'border-border/80 focus:ring-sky-500/50 focus:border-sky-500'
+                    }`}
                     placeholder="ادخل اسمك الكامل"
                   />
                 </div>
+                {formErrors.name && <p className="text-xs text-red-500 mt-1.5 font-medium">{formErrors.name}</p>}
               </div>
 
               <div>
@@ -312,13 +376,18 @@ export default function CheckoutPage() {
                   </span>
                   <input
                     type="tel"
-                    required
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full pr-11 pl-4 py-3 rounded-2xl border border-border/80 bg-secondary/5 text-foreground focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500 text-sm outline-none transition-all shadow-xs"
+                    onChange={(e) => {
+                      setPhone(e.target.value);
+                      if (formErrors.phone) setFormErrors({ ...formErrors, phone: '' });
+                    }}
+                    className={`w-full pr-11 pl-4 py-3 rounded-2xl border bg-secondary/5 text-foreground focus:ring-2 text-sm outline-none transition-all shadow-xs ${
+                      formErrors.phone ? 'border-red-500 focus:ring-red-500/50' : 'border-border/80 focus:ring-sky-500/50 focus:border-sky-500'
+                    }`}
                     placeholder="01xxxxxxxxx"
                   />
                 </div>
+                {formErrors.phone && <p className="text-xs text-red-500 mt-1.5 font-medium">{formErrors.phone}</p>}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -356,13 +425,18 @@ export default function CheckoutPage() {
               <div>
                 <label className="block text-sm font-bold mb-2 text-foreground/90">العنوان بالتفصيل *</label>
                 <textarea
-                  required
                   rows={3}
                   value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  className="w-full px-4 py-3 rounded-2xl border border-border/80 bg-secondary/5 text-foreground focus:ring-2 focus:ring-sky-500/50 focus:border-sky-500 text-sm outline-none transition-all resize-none shadow-xs"
+                  onChange={(e) => {
+                    setAddress(e.target.value);
+                    if (formErrors.address) setFormErrors({ ...formErrors, address: '' });
+                  }}
+                  className={`w-full px-4 py-3 rounded-2xl border bg-secondary/5 text-foreground focus:ring-2 text-sm outline-none transition-all resize-none shadow-xs ${
+                    formErrors.address ? 'border-red-500 focus:ring-red-500/50' : 'border-border/80 focus:ring-sky-500/50 focus:border-sky-500'
+                  }`}
                   placeholder="الشارع، رقم الحارة، العلامة المميزة..."
                 ></textarea>
+                {formErrors.address && <p className="text-xs text-red-500 mt-1.5 font-medium">{formErrors.address}</p>}
               </div>
 
               <button
@@ -393,7 +467,7 @@ export default function CheckoutPage() {
               </h3>
               <span className="text-xs bg-sky-500/10 text-sky-500 font-bold px-2.5 py-1 rounded-full border border-sky-500/20">
                 {cartItems.length} منتجات
-              </span>
+            </span>
             </div>
             
             <div className="space-y-3.5 max-h-80 overflow-y-auto mb-4 ps-1">
@@ -445,17 +519,17 @@ export default function CheckoutPage() {
                 <span>الإجمالي الكلي</span>
                 <span className="text-sky-500 text-lg sm:text-xl font-black whitespace-nowrap">{totalAmount} ج.م</span>
               </div>
-            </div>
+          </div>
 
-            <div className="mt-6 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-purple-500/10 p-4 rounded-2xl border border-sky-500/20 flex items-start gap-3 shadow-inner">
-              <ShieldCheck className="text-sky-500 shrink-0 mt-0.5" size={20} />
-              <p className="text-xs text-foreground/80 leading-relaxed">
-                ضمان حقيقي ودعم فني متواصل لجميع منتجات معالجة المياه والتكييفات والمنتجات المستعملة والجديدة.
-              </p>
-            </div>
+          <div className="mt-6 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-purple-500/10 p-4 rounded-2xl border border-sky-500/20 flex items-start gap-3 shadow-inner">
+            <ShieldCheck className="text-sky-500 shrink-0 mt-0.5" size={20} />
+            <p className="text-xs text-foreground/80 leading-relaxed">
+              ضمان حقيقي ودعم فني متواصل لجميع منتجات معالجة المياه والتكييفات والمنتجات المستعملة والجديدة.
+            </p>
           </div>
         </div>
       </div>
-    </main>
+    </div>
+  </main>
   );
 }

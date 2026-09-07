@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { FileText, UploadCloud, CheckCircle2, Loader2, Send, X, AlertCircle, Sparkles, Lock } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { saveUserMessage } from '@/lib/messageService';
 
 interface JobsFormProps {
@@ -13,13 +13,11 @@ interface JobsFormProps {
 export default function JobsForm({ initialContent }: JobsFormProps) {
   const [mounted, setMounted] = useState(false);
   const [maxDate, setMaxDate] = useState('');
+  const [minDate, setMinDate] = useState('');
   const [fileName, setFileName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
-  
   const [modalMessage, setModalMessage] = useState<string | null>(null);
-  const [profileWarningMessage, setProfileWarningMessage] = useState<string | null>(null);
-  const [warnedFields, setWarnedFields] = useState<{ [key: string]: boolean }>({});
 
   const [content, setContent] = useState(initialContent || {
     title: "وظائف بيورلايف",
@@ -71,6 +69,7 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
     jobs: [] as string[],
     cvBase64: '',
     cvName: '',
+    botcheck: '',
   });
 
   useEffect(() => {
@@ -78,24 +77,37 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
     document.documentElement.setAttribute('dir', 'rtl');
     document.documentElement.setAttribute('lang', 'ar');
 
-    const unsubscribeContent = onSnapshot(doc(db, 'site_content', 'jobs_page'), (docSnap) => {
-      if (docSnap.exists()) {
-        setContent((prev: any) => ({ ...prev, ...docSnap.data() }));
-      }
-    });
+    let isMounted = true;
+
+    let unsubscribeContent: any = () => {};
+    try {
+      unsubscribeContent = onSnapshot(doc(db, 'site_content', 'jobs_page'), (docSnap) => {
+        if (!isMounted) return;
+        if (docSnap.exists()) {
+          setContent((prev: any) => ({ ...prev, ...docSnap.data() }));
+        }
+      }, (error) => {
+        console.warn("Skipped content snapshot due to permissions:", error);
+      });
+    } catch (e) {
+      console.warn("Content listener error:", e);
+    }
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (!isMounted) return;
       if (user) {
         let firestoreData: any = {};
         try {
           const userDocRef = doc(db, 'users', user.uid);
           const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
+          if (userDocSnap.exists() && isMounted) {
             firestoreData = userDocSnap.data();
           }
         } catch (error) {
-          console.error("Error fetching user profile data:", error);
+          console.warn("User profile fetch skipped due to permissions/rules.");
         }
+
+        if (!isMounted) return;
 
         const profileData = {
           isLoggedIn: true,
@@ -114,29 +126,36 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
           address: profileData.address,
           email: profileData.email,
         }));
-      } else {
+      } else if (isMounted) {
         setUserProfile({ isLoggedIn: false, fullname: '', phone: '', address: '', email: '', uid: '' });
       }
     });
 
     const today = new Date();
     const eighteenYearsAgo = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+    const hundredYearsAgo = new Date(today.getFullYear() - 100, today.getMonth(), today.getDate());
+    
     setMaxDate(eighteenYearsAgo.toISOString().split('T')[0]);
+    setMinDate(hundredYearsAgo.toISOString().split('T')[0]);
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setModalMessage(null);
-        setProfileWarningMessage(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      isMounted = false;
       unsubscribeContent();
       unsubscribeAuth();
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
+
+  const sanitizeText = (text: string) => {
+    return text.replace(/<[^>]*>?/gm, '').trim();
+  };
 
   const handleChange = (field: string, value: any) => {
     if (field === 'email' && userProfile.isLoggedIn) return;
@@ -144,25 +163,14 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
     if (field === 'phone') {
       const filteredPhone = value.replace(/[^\d\s+\-()]/g, '');
       setFormData((prev) => ({ ...prev, phone: filteredPhone }));
-
-      if (userProfile.isLoggedIn && userProfile.phone) {
-        if (filteredPhone !== userProfile.phone && !warnedFields['phone']) {
-          setProfileWarningMessage('تنبيه: لقد قمت بتعديل رقم الهاتف مقارنة ببيانات حسابك الشخصي (سيتم تحديث حسابك الأساسي تلقائياً عند إرسال الطلب).');
-          setWarnedFields((prev) => ({ ...prev, phone: true }));
-        }
-      }
       return;
     }
 
-    setFormData((prev) => ({ ...prev, [field]: value }));
-
-    if (userProfile.isLoggedIn) {
-      const originalValue = field === 'fullname' ? userProfile.fullname : field === 'address' ? userProfile.address : '';
-      if (value !== originalValue && !warnedFields[field] && originalValue !== '') {
-        setProfileWarningMessage('تنبيه: لقد قمت بتعديل هذا الحقل مقارنة ببيانات حسابك الشخصي (سيتم تحديث حسابك الأساسي تلقائياً عند إرسال الطلب).');
-        setWarnedFields((prev) => ({ ...prev, [field]: true }));
-      }
+    if (field === 'fullname' || field === 'address') {
+      value = sanitizeText(value);
     }
+
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const handleJobCheckboxCommand = (jobLabel: string) => {
@@ -183,6 +191,13 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
 
       if (!validExtensions.includes(fileExtension)) {
         setModalMessage('عذراً، ملفات غير مدعومة. يرجى رفع السيرة الذاتية بصيغة PDF أو Word (.pdf, .doc, .docx) فقط.');
+        e.target.value = '';
+        setFileName('');
+        return;
+      }
+
+      if (file.size > 5 * 1024 * 1024) {
+        setModalMessage('حجم الملف كبير جداً. الحد الأقصى المسموح به هو 5 ميجابايت.');
         e.target.value = '';
         setFileName('');
         return;
@@ -228,6 +243,32 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    if (formData.botcheck) {
+      return;
+    }
+
+    if (formData.birthdate) {
+      const birthDateObj = new Date(formData.birthdate);
+      const todayDate = new Date();
+      let age = todayDate.getFullYear() - birthDateObj.getFullYear();
+      const m = todayDate.getMonth() - birthDateObj.getMonth();
+      if (m < 0 || (m === 0 && todayDate.getDate() < birthDateObj.getDate())) {
+        age--;
+      }
+      if (age < 18 || age > 100) {
+        setModalMessage('عذراً، يجب أن يكون عمر المتقدم بين 18 و 100 عام.');
+        return;
+      }
+    }
+
+    const lastSubmitTime = localStorage.getItem('last_job_submit');
+    const now = Date.now();
+    if (lastSubmitTime && now - parseInt(lastSubmitTime) < 300000) {
+      setModalMessage('عذراً، لقد تجاوزت الحد المسموح به من الطلبات. يرجى الانتظار لمدة 5 دقائق قبل إرسال طلب توظيف آخر.');
+      return;
+    }
+
     if (formData.jobs.length === 0) {
       setModalMessage(content?.validationError || 'من فضلك، اختر وظيفة واحدة على الأقل للتقديم!');
       return;
@@ -236,65 +277,39 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
     setIsSubmitting(true);
 
     try {
-      const form = e.currentTarget;
-      const data = new FormData(form);
-
       const finalEmail = userProfile.isLoggedIn && userProfile.email ? userProfile.email : formData.email;
-      if (finalEmail) {
-        data.set('email', finalEmail);
-      }
 
-      data.delete('jobs');
-      formData.jobs.forEach((job) => data.append('jobs', job));
-
-      if (formData.cvBase64) {
-        data.set('cv_file_name', formData.cvName);
-        data.set('cv_attachment', formData.cvBase64);
-      }
-
-      const response = await fetch('https://api.web3forms.com/submit', {
-        method: 'POST',
-        body: data,
-      });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        setModalMessage(result.message || 'حدث خطأ أثناء الإرسال.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // هنا يتم الحفظ تلقائياً في كولكشن job_applications عبر دالة saveUserMessage
-      await saveUserMessage('jobs', {
-        title: `طلب توظيف: ${formData.jobs.join('، ')}`,
-        name: formData.fullname,
+      const payloadData = {
+        userId: userProfile.isLoggedIn ? userProfile.uid : 'زائر',
+        fullname: formData.fullname,
         birthdate: formData.birthdate,
-        email: finalEmail,
+        email: finalEmail || 'لم يتم تسجيله',
         address: formData.address,
         phone: formData.phone,
-        jobs: formData.jobs,
-        cvName: formData.cvName,
-        cvBase64: formData.cvBase64,
-        message: `الوظائف المتقدم لها: ${formData.jobs.join(', ')}`,
-      }, userProfile.isLoggedIn ? userProfile.uid : null);
+        jobs: formData.jobs.join(', '),
+        cvBase64: formData.cvBase64 || 'لم يتم رفع ملف',
+        cvName: formData.cvName || 'بدون ملف'
+      };
 
-      if (userProfile.isLoggedIn) {
+      await saveUserMessage('job_applications', payloadData);
+
+      if (userProfile.isLoggedIn && userProfile.uid) {
         try {
           const userDocRef = doc(db, 'users', userProfile.uid);
-          await updateDoc(userDocRef, {
+          await setDoc(userDocRef, {
             name: formData.fullname,
+            fullname: formData.fullname,
             phone: formData.phone,
             address: formData.address,
             updatedAt: new Date().toISOString()
-          });
+          }, { merge: true });
         } catch (updateError) {
-          console.error("Error updating profile:", updateError);
+          console.warn("Bypassed profile sync due to Firestore rules.");
         }
       }
 
+      localStorage.setItem('last_job_submit', now.toString());
       setIsSubmitted(true);
-      form.reset();
       setFileName('');
       setFormData({ 
         fullname: userProfile.isLoggedIn ? userProfile.fullname : '', 
@@ -305,17 +320,18 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
         jobs: [],
         cvBase64: '',
         cvName: '',
+        botcheck: '',
       });
-      setWarnedFields({});
     } catch (error) {
-      setModalMessage('حدث خطأ في الاتصال بالشبكة.');
+      console.error(error);
+      setModalMessage('حدث خطأ في الاتصال أو أثناء حفظ البيانات.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <main dir="rtl" className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20 transition-colors duration-300 bg-[var(--background)] text-[var(--foreground)]">
+    <main dir="rtl" className="container mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16 transition-colors duration-300 bg-[var(--background)] text-[var(--foreground)]">
       
       {modalMessage && (
         <div onClick={() => setModalMessage(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
@@ -329,29 +345,17 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
         </div>
       )}
 
-      {profileWarningMessage && (
-        <div onClick={() => setProfileWarningMessage(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-          <div onClick={(e) => e.stopPropagation()} className="bg-[var(--background)] text-[var(--foreground)] border border-amber-500/40 p-6 sm:p-8 rounded-3xl shadow-2xl max-w-md w-full relative space-y-4 text-center">
-            <button onClick={() => setProfileWarningMessage(null)} className="absolute top-4 start-4 p-2 text-[var(--foreground)]/60 hover:text-[var(--foreground)] bg-[var(--secondary)]/20 rounded-full transition-colors cursor-pointer"><X size={18} /></button>
-            <div className="flex justify-center text-amber-500 pt-2"><AlertCircle size={48} /></div>
-            <h3 className="text-xl font-bold">تعديل البيانات</h3>
-            <p className="text-sm text-[var(--foreground)]/80 leading-relaxed">{profileWarningMessage}</p>
-            <button onClick={() => setProfileWarningMessage(null)} className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-all shadow-md cursor-pointer mt-2">موافق، متابعة</button>
-          </div>
-        </div>
-      )}
-
-      <header className="text-center mb-12 md:mb-16 space-y-4">
+      <header className="text-center mb-10 md:mb-14 space-y-4">
         <div className="flex justify-center">
-          <div className="p-5 rounded-3xl bg-[var(--secondary)]/10 text-[var(--secondary)] transition-all duration-300 hover:scale-110 shadow-lg border border-[var(--border)]">
-            <FileText size={44} strokeWidth={1.8} aria-hidden="true" />
+          <div className="p-4 sm:p-5 rounded-3xl bg-[var(--secondary)]/10 text-[var(--secondary)] transition-all duration-300 hover:scale-110 shadow-lg border border-[var(--border)]">
+            <FileText size={40} strokeWidth={1.8} aria-hidden="true" />
           </div>
         </div>
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-[var(--secondary)] tracking-tight">{content?.title || 'وظائف بيورلايف'}</h1>
-        {content?.subtitle && <p className="text-[var(--foreground)]/70 text-sm sm:text-base max-w-xl mx-auto">{content.subtitle}</p>}
+        <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-[var(--secondary)] tracking-tight">{content?.title || 'وظائف بيورلايف'}</h1>
+        {content?.subtitle && <p className="text-[var(--foreground)]/70 text-xs sm:text-base max-w-xl mx-auto px-2">{content.subtitle}</p>}
       </header>
 
-      <section className="max-w-2xl mx-auto bg-[var(--background)] text-[var(--foreground)] p-6 sm:p-8 md:p-10 rounded-3xl shadow-2xl border border-[var(--border)] relative overflow-hidden backdrop-blur-md">
+      <section className="max-w-2xl mx-auto bg-[var(--background)] text-[var(--foreground)] p-5 sm:p-8 md:p-10 rounded-3xl shadow-2xl border border-[var(--border)] relative overflow-hidden backdrop-blur-md">
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-[var(--secondary)] to-transparent opacity-90"></div>
 
         {isSubmitted ? (
@@ -370,8 +374,8 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
                   jobs: [],
                   cvBase64: '',
                   cvName: '',
+                  botcheck: '',
                 });
-                setWarnedFields({});
               }}
               className="mt-6 px-8 py-3.5 bg-[var(--secondary)] text-white rounded-xl font-bold hover:opacity-95 transition-all shadow-lg cursor-pointer"
             >
@@ -380,49 +384,52 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5 pt-2">
-            <input type="hidden" name="access_key" value="700a6c1a-aabe-4100-8d9d-e860e940a1e5" />
-            <input type="hidden" name="subject" value="طلب توظيف جديد من الموقع الإلكتروني" />
-            
+            <input type="checkbox" name="botcheck" className="hidden" style={{ display: 'none' }} value={formData.botcheck} onChange={(e) => setFormData(prev => ({ ...prev, botcheck: e.target.value }))} />
+
             {userProfile.isLoggedIn && (
-              <div className="p-4 rounded-2xl bg-[var(--secondary)]/10 border border-[var(--secondary)]/20 flex items-start gap-3 text-sm text-[var(--foreground)]">
+              <div className="p-4 rounded-2xl bg-[var(--secondary)]/10 border border-[var(--secondary)]/25 flex items-start gap-3 text-xs sm:text-sm text-[var(--foreground)]">
                 <Sparkles size={20} className="text-[var(--secondary)] shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  أهلاً بك! أي تعديل ستقوم به على بياناتك الشخصية (الاسم، الهاتف، العنوان) سيتم تحديثه تلقائياً في حسابك فور إرسال الطلب.
+                    أهلاً بك! بما أنك مسجل الدخول، أي تعديل ستقوم به على بياناتك (الاسم، الهاتف، أو العنوان) سيتم تحديثه تلقائياً في حسابك الشخصي فور إرسال هذه الرسالة.
                 </p>
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
               <div>
-                <label htmlFor="fullname" className="block text-sm font-bold mb-2">{content?.fullnameLabel || 'الاسم بالكامل'}</label>
+                <label htmlFor="fullname" className="block text-xs sm:text-sm font-bold mb-2">{content?.fullnameLabel || 'الاسم بالكامل'}</label>
                 <input 
                   name="fullname" 
                   id="fullname" 
                   type="text" 
                   required 
+                  pattern="[\u0600-\u06FFa-zA-Z\s]+"
+                  minLength={3}
+                  maxLength={50}
                   value={formData.fullname}
                   onChange={(e) => handleChange('fullname', e.target.value)}
-                  className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
+                  className="w-full p-3.5 text-sm rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
                 />
               </div>
               <div>
-                <label htmlFor="birthdate" className="block text-sm font-bold mb-2">{content?.birthdateLabel || 'تاريخ الميلاد'}</label>
+                <label htmlFor="birthdate" className="block text-xs sm:text-sm font-bold mb-2">{content?.birthdateLabel || 'تاريخ الميلاد'}</label>
                 <input 
                   name="birthdate" 
                   id="birthdate" 
                   type="date" 
+                  min={minDate}
                   max={maxDate} 
                   required 
                   value={formData.birthdate}
                   onChange={(e) => handleChange('birthdate', e.target.value)}
-                  className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
+                  className="w-full p-3.5 text-sm rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
                 />
               </div>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                <label htmlFor="email" className="block text-sm font-bold">
+                <label htmlFor="email" className="block text-xs sm:text-sm font-bold">
                   {content?.emailLabel || 'البريد الإلكتروني'}
                   {!userProfile.isLoggedIn && (
                     <span className="text-[var(--foreground)]/60 font-normal text-xs ms-1.5">
@@ -431,19 +438,19 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
                   )}
                 </label>
                 {userProfile.isLoggedIn && (
-                  <span className="text-xs text-[var(--secondary)] flex items-center gap-1">
+                  <span className="text-[11px] sm:text-xs text-[var(--secondary)] flex items-center gap-1">
                     <Lock size={12} /> {content?.readOnlyNotice}
                   </span>
                 )}
               </div>
               <input 
-                name={!userProfile.isLoggedIn ? 'email' : undefined} 
+                name="email" 
                 id="email" 
                 type="email" 
                 value={formData.email}
                 disabled={userProfile.isLoggedIn}
                 onChange={(e) => handleChange('email', e.target.value)}
-                className={`w-full p-3.5 rounded-2xl border border-[var(--border)] outline-none transition-all ${
+                className={`w-full p-3.5 text-sm rounded-2xl border border-[var(--border)] outline-none transition-all ${
                   userProfile.isLoggedIn 
                     ? 'opacity-70 bg-[var(--secondary)]/5 cursor-not-allowed' 
                     : 'bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)]'
@@ -451,56 +458,60 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
               <div>
-                <label htmlFor="address" className="block text-sm font-bold mb-2">{content?.addressLabel || 'العنوان'}</label>
+                <label htmlFor="address" className="block text-xs sm:text-sm font-bold mb-2">{content?.addressLabel || 'العنوان'}</label>
                 <input 
                   name="address" 
                   id="address" 
                   type="text" 
                   required 
+                  minLength={5}
+                  maxLength={100}
                   value={formData.address}
                   onChange={(e) => handleChange('address', e.target.value)}
-                  className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
+                  className="w-full p-3.5 text-sm rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
                 />
               </div>
               <div>
-                <label htmlFor="phone" className="block text-sm font-bold mb-2">{content?.phoneLabel || 'رقم الهاتف'}</label>
+                <label htmlFor="phone" className="block text-xs sm:text-sm font-bold mb-2">{content?.phoneLabel || 'رقم الهاتف'}</label>
                 <input 
                   name="phone" 
                   id="phone" 
                   type="tel" 
                   inputMode="numeric"
                   required 
+                  minLength={10}
+                  maxLength={15}
                   value={formData.phone}
                   onChange={(e) => handleChange('phone', e.target.value)}
-                  className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
+                  className="w-full p-3.5 text-sm rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-bold mb-3">{content?.jobsTitle || 'الوظيفة المطلوبة (يجب اختيار واحدة على الأقل)'}</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <label className="block text-xs sm:text-sm font-bold mb-3">{content?.jobsTitle || 'الوظيفة المطلوبة (يجب اختيار واحدة على الأقل)'}</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {jobsList.map((job) => (
-                  <label key={job.key} className="flex items-center gap-3.5 bg-[var(--background)] p-4 rounded-2xl border border-[var(--border)] cursor-pointer hover:border-[var(--secondary)] transition-all">
+                  <label key={job.key} className="flex items-center gap-3 bg-[var(--background)] p-3.5 rounded-2xl border border-[var(--border)] cursor-pointer hover:border-[var(--secondary)] transition-all">
                     <input 
                       type="checkbox" 
                       name="jobs" 
                       value={job.label} 
                       checked={formData.jobs.includes(job.label)}
                       onChange={() => handleJobCheckboxCommand(job.label)}
-                      className="accent-[var(--secondary)] w-5 h-5 rounded-md cursor-pointer" 
+                      className="accent-[var(--secondary)] w-4 h-4 sm:w-5 sm:h-5 rounded-md cursor-pointer" 
                     />
-                    <span className="text-sm font-bold text-[var(--foreground)]">{job.label}</span>
+                    <span className="text-xs sm:text-sm font-bold text-[var(--foreground)]">{job.label}</span>
                   </label>
                 ))}
               </div>
             </div>
 
             <div>
-              <label htmlFor="cv-file-input" className="block text-sm font-bold mb-2">{content?.cvLabel || 'ارفع ملف الـ CV (اختياري)'}</label>
-              <div className="relative border-2 border-dashed border-[var(--border)] hover:border-[var(--secondary)] rounded-2xl p-6 text-center bg-[var(--background)] transition-all">
+              <label htmlFor="cv-file-input" className="block text-xs sm:text-sm font-bold mb-2">{content?.cvLabel || 'ارفع ملف الـ CV (اختياري)'}</label>
+              <div className="relative border-2 border-dashed border-[var(--border)] hover:border-[var(--secondary)] rounded-2xl p-5 sm:p-6 text-center bg-[var(--background)] transition-all">
                 <input 
                   type="file" 
                   name="cv" 
@@ -510,14 +521,14 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
                   className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                 />
                 <div className="flex flex-col items-center justify-center space-y-2">
-                  <UploadCloud size={36} className="text-[var(--secondary)]" />
+                  <UploadCloud size={32} className="text-[var(--secondary)]" />
                   {fileName ? (
-                    <div className="flex items-center gap-2 bg-[var(--secondary)]/10 px-3 py-1.5 rounded-xl border border-[var(--border)] text-[var(--secondary)] font-semibold text-sm">
-                      <span>{fileName}</span>
+                    <div className="flex items-center gap-2 bg-[var(--secondary)]/10 px-3 py-1.5 rounded-xl border border-[var(--border)] text-[var(--secondary)] font-semibold text-xs sm:text-sm">
+                      <span className="truncate max-w-[200px] sm:max-w-xs">{fileName}</span>
                       <button onClick={removeFile} className="hover:text-red-500 cursor-pointer"><X size={16} /></button>
                     </div>
                   ) : (
-                    <p className="text-sm text-[var(--foreground)]/70">{content?.cvPlaceholder || 'اضغط لرفع الـ CV هنا (.pdf, .doc, .docx)'}</p>
+                    <p className="text-xs sm:text-sm text-[var(--foreground)]/70">{content?.cvPlaceholder || 'اضغط لرفع الـ CV هنا (.pdf, .doc, .docx)'}</p>
                   )}
                 </div>
               </div>
@@ -526,16 +537,16 @@ export default function JobsForm({ initialContent }: JobsFormProps) {
             <button 
               type="submit" 
               disabled={isSubmitting}
-              className="w-full bg-[var(--secondary)] text-white py-4 rounded-2xl font-black text-lg transition-all hover:opacity-95 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 shadow-lg"
+              className="w-full bg-[var(--secondary)] text-white py-3.5 sm:py-4 rounded-2xl font-black text-base sm:text-lg transition-all hover:opacity-95 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 shadow-lg"
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="animate-spin" size={24} />
+                  <Loader2 className="animate-spin" size={22} />
                   <span>{content?.submittingButton || 'جاري الإرسال...'}</span>
                 </>
               ) : (
                 <>
-                  <Send size={20} className="rtl:rotate-180" />
+                  <Send size={18} className="rtl:rotate-180" />
                   <span>{content?.submitButton || 'إرسال الطلب'}</span>
                 </>
               )}

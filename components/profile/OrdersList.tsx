@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
@@ -17,6 +17,11 @@ export const OrdersList: React.FC<OrdersListProps> = ({ user }) => {
   const [cancelReason, setCancelReason] = useState('');
   const [submittingCancel, setSubmittingCancel] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // حالات الفلترة والتقسيم إلى صفحات (Pagination)
+  const [filterType, setFilterType] = useState<'all' | 'new' | 'used'>('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // جلب الطلبات الخاصة بالمستخدم الحالي من فايربيز بناءً على البروب الواصل (user)
   useEffect(() => {
@@ -95,10 +100,9 @@ export const OrdersList: React.FC<OrdersListProps> = ({ user }) => {
         statusLabel: 'ملغي',
         cancelReason: cancelReason.trim(),
         cancelledAt: new Date(),
-        cancelledBy: 'user', // لتوضيح أن الإلغاء تم من طرف المستخدم
+        cancelledBy: 'user',
       });
 
-      // تحديث الحالة محلياً
       setOrders(prev => prev.map(ord => ord.id === selectedOrderId ? {
         ...ord,
         status: 'cancelled',
@@ -118,14 +122,91 @@ export const OrdersList: React.FC<OrdersListProps> = ({ user }) => {
     }
   };
 
+  // فلترة الطلبات بناءً على الاختيار (الكل، جديد، مستعمل)
+  const filteredOrders = orders.filter((order) => {
+    if (filterType === 'all') return true;
+    
+    // فحص المنتجات داخل الطلب لمعرفة ما إذا كانت تحتوي على النوع المطلوب
+    const items = order.items || order.products || [];
+    if (items.length > 0) {
+      return items.some((item: any) => {
+        const type = (item.type || item.condition || item.productType || '').toLowerCase();
+        if (filterType === 'new') return type.includes('جديد') || type === 'new';
+        if (filterType === 'used') return type.includes('مستعمل') || type === 'used';
+        return false;
+      });
+    }
+
+    // الفحص العام للطلب لو لم تكن المنتجات مصفوفة مفصلة
+    const generalType = (order.productType || order.condition || '').toLowerCase();
+    if (filterType === 'new') return generalType.includes('جديد') || generalType === 'new';
+    if (filterType === 'used') return generalType.includes('مستعمل') || generalType === 'used';
+    
+    return true;
+  });
+
+  // حساب العناصر الخاصة بالصفحة الحالية بعد الفلترة
+  const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentOrders = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
+
+  // تغيير الصفحة والانتقال بسلاسة للأعلى
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // إعادة الصفحة إلى 1 عند تغيير الفلتر
+  const handleFilterChange = (type: 'all' | 'new' | 'used') => {
+    setFilterType(type);
+    setCurrentPage(1);
+  };
+
   return (
     <div className="bg-card text-card-foreground rounded-3xl shadow-xl shadow-black/5 border border-border/80 p-6 sm:p-10 transition-all duration-300 relative">
-      <div className="text-center sm:text-right mb-10">
+      <div className="text-center sm:text-right mb-6">
         <h2 className="text-2xl sm:text-3xl font-black text-foreground mb-2 tracking-tight">مشترياتي (الجديدة والمستعملة) ومتابعة الطلب</h2>
         <p className="text-xs sm:text-sm font-semibold text-[#0ea5e9]">
-          تتبع تفاصيل مشترياتك وحالة الطلب لكل طلب بكل سهولة.
+          تتبع تفاصيل مشترياتك وتفاصيل المنتجات وحالة الطلب لكل طلب بكل سهولة.
         </p>
       </div>
+
+      {/* أزرار الفلترة (الكل، المنتجات الجديدة، المنتجات المستعملة) */}
+      {!loading && orders.length > 0 && (
+        <div className="flex items-center justify-center sm:justify-start gap-2 mb-8 pb-4 border-b border-border/60 flex-wrap">
+          <button
+            onClick={() => handleFilterChange('all')}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold transition cursor-pointer ${
+              filterType === 'all'
+                ? 'bg-[#0ea5e9] text-white shadow-md shadow-[#0ea5e9]/25'
+                : 'bg-muted/40 hover:bg-muted text-foreground'
+            }`}
+          >
+            جميع الطلبات ({orders.length})
+          </button>
+          <button
+            onClick={() => handleFilterChange('new')}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold transition cursor-pointer ${
+              filterType === 'new'
+                ? 'bg-[#0ea5e9] text-white shadow-md shadow-[#0ea5e9]/25'
+                : 'bg-muted/40 hover:bg-muted text-foreground'
+            }`}
+          >
+            الطلبات الجديدة
+          </button>
+          <button
+            onClick={() => handleFilterChange('used')}
+            className={`px-4 py-2 rounded-2xl text-xs font-bold transition cursor-pointer ${
+              filterType === 'used'
+                ? 'bg-[#0ea5e9] text-white shadow-md shadow-[#0ea5e9]/25'
+                : 'bg-muted/40 hover:bg-muted text-foreground'
+            }`}
+          >
+            الطلبات المستعملة
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="bg-card text-card-foreground rounded-3xl p-12 text-center">
@@ -145,10 +226,15 @@ export const OrdersList: React.FC<OrdersListProps> = ({ user }) => {
             </a>
           </div>
         </div>
+      ) : filteredOrders.length === 0 ? (
+        <div className="text-center py-12 border border-dashed border-border/80 rounded-2xl bg-muted/10">
+          <p className="text-foreground font-bold text-sm">لا توجد طلبات تطابق الفلتر المحدد.</p>
+        </div>
       ) : (
         <div className="space-y-6">
-          {orders.map((order) => {
+          {currentOrders.map((order) => {
             const canCancel = order.status !== 'completed' && order.status !== 'cancelled' && order.status !== 'منتهي';
+            const orderItems = order.items || order.products || [];
 
             return (
               <div key={order.id} className="border border-border/80 bg-background rounded-2xl p-5 sm:p-6 transition-all shadow-xs space-y-4">
@@ -174,16 +260,60 @@ export const OrdersList: React.FC<OrdersListProps> = ({ user }) => {
                   </div>
                 </div>
 
-                {/* تفاصيل المنتجات والمشتريات */}
+                {/* تفاصيل المنتجات والمشتريات المفصلة لكل جهاز/منتج */}
                 <div className="space-y-3">
-                  <div className="bg-muted/40 rounded-xl p-4 text-sm text-foreground/90 font-medium space-y-1">
-                    <p><strong className="text-muted-foreground ml-1">إجمالي المبلغ:</strong> {order.totalAmount || order.price || 'غير متوفر'} ج.م</p>
-                    <p><strong className="text-muted-foreground ml-1">عنوان الشحن:</strong> {order.shippingAddress || order.address || 'العنوان المسجل بالملف الشخصي'}</p>
-                    {order.cancelReason && (
-                      <p className="text-rose-500 font-semibold pt-1">
-                        <strong>سبب الإلغاء ({order.cancelledBy === 'admin' ? 'بواسطة الإدارة' : 'بواسطتك'}):</strong> {order.cancelReason}
-                      </p>
+                  <div className="bg-muted/40 rounded-2xl p-4 text-sm text-foreground/90 font-medium space-y-3">
+                    <p className="text-xs font-bold text-[#0ea5e9] uppercase tracking-wider mb-2">قائمة المنتجات والأجهزة المطلوبة:</p>
+                    
+                    {orderItems.length > 0 ? (
+                      <div className="space-y-2">
+                        {orderItems.map((item: any, idx: number) => {
+                          const itemCondition = item.type || item.condition || item.productType || 'جديد';
+                          const itemQty = item.quantity || item.count || 1;
+                          const itemPrice = item.price || item.unitPrice || 0;
+                          const itemName = item.name || item.title || item.productName || `منتج #${idx + 1}`;
+
+                          return (
+                            <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-background border border-border/60 text-xs">
+                              <div className="space-y-1">
+                                <span className="font-bold text-foreground text-sm block">{itemName}</span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className={`px-2 py-0.5 rounded-md font-bold ${
+                                    String(itemCondition).toLowerCase().includes('مستعمل') 
+                                      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' 
+                                      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                  }`}>
+                                    {itemCondition}
+                                  </span>
+                                  {item.model && <span className="text-muted-foreground">الموديل: {item.model}</span>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4 text-muted-foreground font-semibold">
+                                <span>الكمية: <strong className="text-foreground">{itemQty}</strong></span>
+                                <span>السعر: <strong className="text-foreground">{itemPrice} ج.م</strong></span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl bg-background border border-border/60 text-xs space-y-1">
+                        <p><strong className="text-muted-foreground">اسم المنتج / الطلب:</strong> {order.productName || order.title || 'منتج عام'}</p>
+                        <p><strong className="text-muted-foreground">الحالة:</strong> {order.productType || order.condition || 'جديد'}</p>
+                        <p><strong className="text-muted-foreground">الكمية:</strong> {order.quantity || 1}</p>
+                        <p><strong className="text-muted-foreground">السعر:</strong> {order.price || order.totalAmount || 0} ج.م</p>
+                      </div>
                     )}
+
+                    <div className="pt-2 border-t border-border/60 space-y-1 text-xs sm:text-sm">
+                      <p><strong className="text-muted-foreground ml-1">إجمالي المبلغ:</strong> <span className="font-bold text-foreground">{order.totalAmount || order.price || 'غير متوفر'} ج.م</span></p>
+                      <p><strong className="text-muted-foreground ml-1">عنوان الشحن:</strong> {order.shippingAddress || order.address || 'العنوان المسجل بالملف الشخصي'}</p>
+                      {order.cancelReason && (
+                        <p className="text-rose-500 font-semibold pt-1">
+                          <strong>سبب الإلغاء ({order.cancelledBy === 'admin' ? 'بواسطة الإدارة' : 'بواسطتك'}):</strong> {order.cancelReason}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -202,6 +332,44 @@ export const OrdersList: React.FC<OrdersListProps> = ({ user }) => {
               </div>
             );
           })}
+
+          {/* نظام التنقل بين الصفحات (Pagination) */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-6 border-t border-border/60 flex-wrap">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-4 py-2 rounded-xl bg-muted/60 hover:bg-muted text-foreground text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                السابق
+              </button>
+
+              {Array.from({ length: totalPages }, (_, index) => {
+                const pageNum = index + 1;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`w-9 h-9 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      currentPage === pageNum
+                        ? 'bg-[#0ea5e9] text-white shadow-md shadow-[#0ea5e9]/20'
+                        : 'bg-muted/40 hover:bg-muted text-foreground'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 rounded-xl bg-muted/60 hover:bg-muted text-foreground text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                التالي
+              </button>
+            </div>
+          )}
         </div>
       )}
 

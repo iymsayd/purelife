@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Wrench, CheckCircle2, Loader2, Send, X, AlertCircle, Info, Lock, Sparkles } from 'lucide-react';
+import { Wrench, CheckCircle2, Loader2, Send, X, AlertCircle, Lock, Sparkles } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { doc, getDoc, updateDoc, onSnapshot } from 'firebase/firestore';
@@ -16,8 +16,6 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
   const [isSubmitted, setIsSubmitted] = useState(false);
   
   const [modalMessage, setModalMessage] = useState<string | null>(null);
-  const [profileWarningMessage, setProfileWarningMessage] = useState<string | null>(null);
-  const [warnedFields, setWarnedFields] = useState<{ [key: string]: boolean }>({});
 
   const [content, setContent] = useState(initialContent || {
     title: "طلب صيانة",
@@ -66,31 +64,40 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
     document.documentElement.setAttribute('dir', 'rtl');
     document.documentElement.setAttribute('lang', 'ar');
 
+    let isMounted = true;
+
     const unsubscribeContent = onSnapshot(doc(db, 'site_content', 'maintenance_page'), (docSnap) => {
+      if (!isMounted) return;
       if (docSnap.exists()) {
         setContent((prev: any) => ({ ...prev, ...docSnap.data() }));
       }
     });
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (!isMounted) return;
       if (user) {
         let firestoreData: any = {};
         try {
           const userDocRef = doc(db, 'users', user.uid);
           const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
+          if (userDocSnap.exists() && isMounted) {
             firestoreData = userDocSnap.data();
           }
         } catch (error) {
           console.error("Error fetching user profile data:", error);
         }
 
+        if (!isMounted) return;
+
+        const rawPhone = firestoreData.phone || user.phoneNumber || '';
+        const cleanedPhone = typeof rawPhone === 'string' ? rawPhone.replace(/[^\d\s+\-()]/g, '').trim() : '';
+
         const profileData = {
           isLoggedIn: true,
-          name: firestoreData.name || user.displayName || '',
-          phone: firestoreData.phone || user.phoneNumber || '',
-          address: firestoreData.address || '',
-          email: user.email || firestoreData.email || '',
+          name: (firestoreData.name || user.displayName || '').trim(),
+          phone: cleanedPhone,
+          address: (firestoreData.address || '').trim(),
+          email: (user.email || firestoreData.email || '').trim(),
           uid: user.uid,
         };
 
@@ -102,7 +109,7 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
           address: profileData.address,
           email: profileData.email,
         }));
-      } else {
+      } else if (isMounted) {
         setUserProfile({ isLoggedIn: false, name: '', phone: '', address: '', email: '', uid: '' });
       }
     });
@@ -110,12 +117,12 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setModalMessage(null);
-        setProfileWarningMessage(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      isMounted = false;
       unsubscribeContent();
       unsubscribeAuth();
       window.removeEventListener('keydown', handleKeyDown);
@@ -125,28 +132,15 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
   const handleChange = (field: string, value: any) => {
     if (field === 'email' && userProfile.isLoggedIn) return;
 
-    if (field === 'phone') {
-      const filteredPhone = value.replace(/[^\d\s+\-()]/g, '');
-      setFormData((prev) => ({ ...prev, phone: filteredPhone }));
+    const sanitizedValue = typeof value === 'string' ? value.replace(/<[^>]*>?/gm, '') : value;
 
-      if (userProfile.isLoggedIn && userProfile.phone) {
-        if (filteredPhone !== userProfile.phone && !warnedFields['phone']) {
-          setProfileWarningMessage('تنبيه: لقد قمت بتعديل رقم الهاتف مقارنة ببيانات حسابك الشخصي (سيتم تحديث حسابك الأساسي تلقائياً عند إرسال الطلب).');
-          setWarnedFields((prev) => ({ ...prev, phone: true }));
-        }
-      }
+    if (field === 'phone') {
+      const filteredPhone = sanitizedValue.replace(/[^\d\s+\-()]/g, '');
+      setFormData((prev) => ({ ...prev, phone: filteredPhone }));
       return;
     }
 
-    setFormData((prev) => ({ ...prev, [field]: value }));
-
-    if (userProfile.isLoggedIn) {
-      const originalValue = field === 'name' ? userProfile.name : field === 'address' ? userProfile.address : '';
-      if (value !== originalValue && !warnedFields[field] && originalValue !== '') {
-        setProfileWarningMessage('تنبيه: لقد قمت بتعديل هذا الحقل مقارنة ببيانات حسابك الشخصي (سيتم تحديث حسابك الأساسي تلقائياً عند إرسال الطلب).');
-        setWarnedFields((prev) => ({ ...prev, [field]: true }));
-      }
-    }
+    setFormData((prev) => ({ ...prev, [field]: sanitizedValue }));
   };
 
   const handleProductCheckboxChange = (productLabel: string) => {
@@ -172,9 +166,23 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
     if (formData.products.length === 0) {
       setModalMessage(content?.validationError || 'من فضلك، اختر نوع منتج واحد على الأقل لطلب الصيانة!');
       return;
+    }
+
+    const lastSubmitTime = localStorage.getItem('last_maintenance_time');
+    const submitCount = parseInt(localStorage.getItem('maintenance_count') || '0', 10);
+    const now = Date.now();
+
+    if (lastSubmitTime && now - parseInt(lastSubmitTime, 10) < 300000) {
+      if (submitCount >= 2) {
+        setModalMessage('عذراً، لقد تجاوزت الحد المسموح به من الطلبات. يرجى الانتظار قليلاً قبل المحاولة مرة أخرى.');
+        return;
+      }
+    } else {
+      localStorage.setItem('maintenance_count', '1');
     }
 
     setIsSubmitting(true);
@@ -203,19 +211,18 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
         return;
       }
 
-      // حفظ الطلب في كولكشن maintenance_requests عبر دالة saveUserMessage
-      await saveUserMessage('maintenance', {
+      await saveUserMessage('maintenance_requests', {
         title: 'طلب صيانة جديد',
         name: formData.name,
         phone: formData.phone,
         address: formData.address,
         email: finalEmail || '',
-        products: formData.products,
+        products: formData.products.join(', '),
         message: formData.message,
-      }, userProfile.isLoggedIn ? userProfile.uid : null);
+        userId: userProfile.isLoggedIn ? userProfile.uid : null,
+      });
 
-      // تحديث بروفايل المستخدم لو كان مسجلاً للدخول
-      if (userProfile.isLoggedIn) {
+      if (userProfile.isLoggedIn && userProfile.uid) {
         try {
           const userDocRef = doc(db, 'users', userProfile.uid);
           await updateDoc(userDocRef, {
@@ -229,6 +236,9 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
         }
       }
 
+      localStorage.setItem('last_maintenance_time', now.toString());
+      localStorage.setItem('maintenance_count', (submitCount + 1).toString());
+
       setIsSubmitted(true);
       form.reset();
       setFormData({
@@ -239,7 +249,6 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
         products: [],
         message: '',
       });
-      setWarnedFields({});
     } catch (error) {
       console.error(error);
       setModalMessage('حدث خطأ في الاتصال بالشبكة.');
@@ -249,7 +258,7 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
   };
 
   return (
-    <main dir="rtl" className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20 transition-colors duration-300 bg-[var(--background)] text-[var(--foreground)]">
+    <main dir="rtl" className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 md:py-20 transition-colors duration-300 bg-[var(--background)] text-[var(--foreground)] min-h-screen flex flex-col justify-center">
       
       {modalMessage && (
         <div onClick={() => setModalMessage(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
@@ -263,41 +272,29 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
         </div>
       )}
 
-      {profileWarningMessage && (
-        <div onClick={() => setProfileWarningMessage(null)} className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
-          <div onClick={(e) => e.stopPropagation()} className="bg-[var(--background)] text-[var(--foreground)] border border-amber-500/40 p-6 sm:p-8 rounded-3xl shadow-2xl max-w-md w-full relative space-y-4 text-center">
-            <button onClick={() => setProfileWarningMessage(null)} className="absolute top-4 start-4 p-2 text-[var(--foreground)]/60 hover:text-[var(--foreground)] bg-[var(--secondary)]/20 rounded-full transition-colors cursor-pointer"><X size={18} /></button>
-            <div className="flex justify-center text-amber-500 pt-2"><AlertCircle size={48} /></div>
-            <h3 className="text-xl font-bold">تعديل البيانات</h3>
-            <p className="text-sm text-[var(--foreground)]/80 leading-relaxed">{profileWarningMessage}</p>
-            <button onClick={() => setProfileWarningMessage(null)} className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl transition-all shadow-md cursor-pointer mt-2">موافق، متابعة</button>
-          </div>
-        </div>
-      )}
-
-      <header className="text-center mb-12 md:mb-16 space-y-4">
+      <header className="text-center mb-8 sm:mb-12 space-y-3">
         <div className="flex justify-center">
-          <div className="p-5 rounded-3xl bg-[var(--secondary)]/10 text-[var(--secondary)] transition-all duration-300 hover:scale-110 shadow-lg border border-[var(--border)]">
-            <Wrench size={44} strokeWidth={1.8} aria-hidden="true" />
+          <div className="p-4 sm:p-5 rounded-3xl bg-[var(--secondary)]/10 text-[var(--secondary)] transition-all duration-300 hover:scale-110 shadow-lg border border-[var(--border)]">
+            <Wrench size={38} strokeWidth={1.8} aria-hidden="true" />
           </div>
         </div>
-        <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-[var(--secondary)] tracking-tight">
+        <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-[var(--secondary)] tracking-tight">
           {content?.title || 'طلب صيانة'}
         </h1>
         {content?.subtitle && (
-          <p className="text-[var(--foreground)]/70 text-sm sm:text-base max-w-xl mx-auto">
+          <p className="text-[var(--foreground)]/70 text-xs sm:text-base max-w-xl mx-auto px-2">
             {content.subtitle}
           </p>
         )}
       </header>
 
-      <section className="max-w-2xl mx-auto bg-[var(--background)] text-[var(--foreground)] p-6 sm:p-8 md:p-10 rounded-3xl shadow-2xl border border-[var(--border)] relative overflow-hidden backdrop-blur-md">
+      <section className="max-w-2xl w-full mx-auto bg-[var(--background)] text-[var(--foreground)] p-5 sm:p-8 md:p-10 rounded-3xl shadow-2xl border border-[var(--border)] relative overflow-hidden backdrop-blur-md">
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-transparent via-[var(--secondary)] to-transparent opacity-90"></div>
 
         {isSubmitted ? (
-          <div className="text-center py-12 space-y-4">
-            <div className="flex justify-center text-green-500 animate-bounce"><CheckCircle2 size={64} /></div>
-            <h2 className="text-2xl font-bold text-[var(--foreground)]">{content?.successMessage || 'تم إرسال طلب الصيانة بنجاح!'}</h2>
+          <div className="text-center py-10 sm:py-12 space-y-4">
+            <div className="flex justify-center text-green-500 animate-bounce"><CheckCircle2 size={56} /></div>
+            <h2 className="text-xl sm:text-2xl font-bold text-[var(--foreground)]">{content?.successMessage || 'تم إرسال طلب الصيانة بنجاح!'}</h2>
             <button
               onClick={() => {
                 setIsSubmitted(false);
@@ -309,74 +306,85 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
                   products: [],
                   message: '',
                 });
-                setWarnedFields({});
               }}
-              className="mt-6 px-8 py-3.5 bg-[var(--secondary)] text-white rounded-xl font-bold hover:opacity-95 transition-all shadow-lg cursor-pointer"
+              className="mt-4 px-6 sm:px-8 py-3.5 bg-[var(--secondary)] text-white rounded-xl font-bold hover:opacity-95 transition-all shadow-lg cursor-pointer text-sm sm:text-base"
             >
               {content?.anotherMessageButton || 'إرسال طلب آخر'}
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="space-y-5 pt-2">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5 pt-2">
             <input type="hidden" name="access_key" value="504542e4-a8e9-41a7-bf42-79827798cb31" />
             <input type="hidden" name="subject" value="طلب صيانة جديد من الموقع الإلكتروني" />
             
             {userProfile.isLoggedIn && (
-              <div className="p-4 rounded-2xl bg-[var(--secondary)]/10 border border-[var(--secondary)]/20 flex items-start gap-3 text-sm text-[var(--foreground)]">
-                <Sparkles size={20} className="text-[var(--secondary)] shrink-0 mt-0.5" />
+              <input type="hidden" name="email" value={formData.email} />
+            )}
+            
+            {userProfile.isLoggedIn && (
+              <div className="p-3.5 sm:p-4 rounded-2xl bg-[var(--secondary)]/10 border border-[var(--secondary)]/25 flex items-start gap-3 text-xs sm:text-sm text-[var(--foreground)]">
+                <Sparkles size={18} className="text-[var(--secondary)] shrink-0 mt-0.5" />
                 <p className="leading-relaxed">
-                  أهلاً بك! أي تعديل ستقوم به على بياناتك الشخصية (الاسم، الهاتف، العنوان) سيتم تحديثه تلقائياً في حسابك فور إرسال الطلب.
+                    أهلاً بك! بما أنك مسجل الدخول، أي تعديل ستقوم به على بياناتك (الاسم، الهاتف، أو العنوان) سيتم تحديثه تلقائياً في حسابك الشخصي فور إرسال هذه الرسالة.
                 </p>
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
               <div>
-                <label htmlFor="name" className="block text-sm font-bold mb-2">{content?.nameLabel || 'الاسم'}</label>
+                <label htmlFor="name" className="block text-xs sm:text-sm font-bold mb-2">{content?.nameLabel || 'الاسم'}</label>
                 <input 
                   name="name" 
                   id="name" 
                   type="text" 
                   required 
+                  minLength={3}
+                  maxLength={50}
+                  pattern="[\u0600-\u06FFa-zA-Z\s]+" 
+                  title="يرجى إدخال حروف صحيحة فقط بدون رموز"
                   autoComplete="name"
                   value={formData.name}
                   onChange={(e) => handleChange('name', e.target.value)}
-                  className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
+                  className="w-full p-3 sm:p-3.5 text-sm sm:text-base rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
                 />
               </div>
               <div>
-                <label htmlFor="phone" className="block text-sm font-bold mb-2">{content?.phoneLabel || 'رقم الهاتف'}</label>
+                <label htmlFor="phone" className="block text-xs sm:text-sm font-bold mb-2">{content?.phoneLabel || 'رقم الهاتف'}</label>
                 <input 
                   name="phone" 
                   id="phone" 
                   type="tel" 
                   inputMode="numeric"
                   required 
+                  minLength={10}
+                  maxLength={15}
                   autoComplete="tel"
                   value={formData.phone}
                   onChange={(e) => handleChange('phone', e.target.value)}
-                  className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
+                  className="w-full p-3 sm:p-3.5 text-sm sm:text-base rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all text-left rtl:text-right" 
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="address" className="block text-sm font-bold mb-2">{content?.addressLabel || 'العنوان'}</label>
+              <label htmlFor="address" className="block text-xs sm:text-sm font-bold mb-2">{content?.addressLabel || 'العنوان'}</label>
               <input 
                 name="address" 
                 id="address" 
                 type="text" 
                 required 
+                minLength={5}
+                maxLength={100}
                 autoComplete="street-address"
                 value={formData.address}
                 onChange={(e) => handleChange('address', e.target.value)}
-                className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
+                className="w-full p-3 sm:p-3.5 text-sm sm:text-base rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all" 
               />
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                <label htmlFor="email" className="block text-sm font-bold">
+                <label htmlFor="email" className="block text-xs sm:text-sm font-bold">
                   {content?.emailLabel || 'البريد الإلكتروني'}
                   {!userProfile.isLoggedIn && (
                     <span className="text-[var(--foreground)]/60 font-normal text-xs ms-1.5">
@@ -395,11 +403,11 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
                 id="email" 
                 type="email" 
                 autoComplete="email"
-                required={!userProfile.isLoggedIn}
+                required={false}
                 value={formData.email}
                 disabled={userProfile.isLoggedIn}
                 onChange={(e) => handleChange('email', e.target.value)}
-                className={`w-full p-3.5 rounded-2xl border border-[var(--border)] outline-none transition-all ${
+                className={`w-full p-3 sm:p-3.5 text-sm sm:text-base rounded-2xl border border-[var(--border)] outline-none transition-all ${
                   userProfile.isLoggedIn 
                     ? 'opacity-70 bg-[var(--secondary)]/5 cursor-not-allowed' 
                     : 'bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)]'
@@ -408,50 +416,52 @@ export default function MaintenanceForm({ initialContent }: MaintenanceFormProps
             </div>
 
             <div>
-              <label className="block text-sm font-bold mb-3">{content?.productTypeLabel || 'نوع المنتج'}</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <label className="block text-xs sm:text-sm font-bold mb-3">{content?.productTypeLabel || 'نوع المنتج'}</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {productsList.map((product) => (
-                  <label key={product.key} className="flex items-center gap-3.5 bg-[var(--background)] p-4 rounded-2xl border border-[var(--border)] cursor-pointer hover:border-[var(--secondary)] transition-all">
+                  <label key={product.key} className="flex items-center gap-3 bg-[var(--background)] p-3.5 sm:p-4 rounded-2xl border border-[var(--border)] cursor-pointer hover:border-[var(--secondary)] transition-all">
                     <input 
                       type="checkbox" 
                       name="products" 
                       value={product.label} 
                       checked={formData.products.includes(product.label)}
                       onChange={() => handleProductCheckboxChange(product.label)}
-                      className="accent-[var(--secondary)] w-5 h-5 rounded-md cursor-pointer" 
+                      className="accent-[var(--secondary)] w-5 h-5 rounded-md cursor-pointer shrink-0" 
                     />
-                    <span className="text-sm font-bold text-[var(--foreground)]">{product.label}</span>
+                    <span className="text-xs sm:text-sm font-bold text-[var(--foreground)]">{product.label}</span>
                   </label>
                 ))}
               </div>
             </div>
 
             <div>
-              <label htmlFor="message" className="block text-sm font-bold mb-2">{content?.messageLabel || 'تفاصيل المشكلة'}</label>
+              <label htmlFor="message" className="block text-xs sm:text-sm font-bold mb-2">{content?.messageLabel || 'تفاصيل المشكلة'}</label>
               <textarea 
                 name="message" 
                 id="message" 
                 rows={4} 
                 required 
+                minLength={10}
+                maxLength={1000}
                 value={formData.message}
                 onChange={(e) => handleChange('message', e.target.value)}
-                className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all resize-none"
+                className="w-full p-3 sm:p-3.5 text-sm sm:text-base rounded-2xl border border-[var(--border)] bg-[var(--background)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all resize-none"
               ></textarea>
             </div>
 
             <button 
               type="submit" 
               disabled={isSubmitting}
-              className="w-full bg-[var(--secondary)] text-white py-4 rounded-2xl font-black text-lg transition-all hover:opacity-95 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 shadow-lg"
+              className="w-full bg-[var(--secondary)] text-white py-3.5 sm:py-4 rounded-2xl font-black text-base sm:text-lg transition-all hover:opacity-95 flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50 shadow-lg"
             >
               {isSubmitting ? (
                 <>
-                  <Loader2 className="animate-spin" size={24} />
+                  <Loader2 className="animate-spin" size={22} />
                   <span>{content?.submittingButton || 'جاري الإرسال...'}</span>
                 </>
               ) : (
                 <>
-                  <Send size={20} className="rtl:rotate-180" />
+                  <Send size={18} className="rtl:rotate-180" />
                   <span>{content?.submitButton || 'إرسال طلب الصيانة'}</span>
                 </>
               )}

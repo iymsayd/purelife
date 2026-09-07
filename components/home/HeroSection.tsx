@@ -1,7 +1,7 @@
+'use client';
 import Link from 'next/link';
 import { Tag, ArrowLeft, ArrowRight, Award } from 'lucide-react';
 
-// تعريف شكل البيانات لتكون قابلة للإدارة بالكامل من الداشبورد (Firebase / DB)
 interface Brand {
   src: string;
   alt: string;
@@ -32,7 +32,6 @@ export default function HeroSection({
   footerNote = "وكيل حصري لأفضل أنواع أجهزة التكييف وفلاتر تنقية المياة"
 }: HeroProps) {
   
-  // دالة ذكية لتلوين جزء معين من الوصف (أعلى مستوى من الخبرة والكفاءة) باللون الثانوي
   const renderFormattedDescription = (text: string) => {
     const targetPhrase = "أعلى مستوى من الخبرة والكفاءة";
     if (text.includes(targetPhrase)) {
@@ -49,53 +48,60 @@ export default function HeroSection({
   };
 
   return (
-    <section className="relative bg-gradient-to-b from-[var(--secondary)]/10 via-[var(--background)] to-[var(--background)] py-12 md:py-20 px-4 transition-colors duration-300">
-      <div className="container mx-auto max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+    <section className="relative bg-gradient-to-b from-[var(--secondary)]/10 via-[var(--background)] to-[var(--background)] py-10 md:py-20 px-4 overflow-hidden transition-colors duration-300">
+      <div className="container mx-auto max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-10 md:gap-12 items-center">
         
         {/* الجزء النصي */}
         <div className="space-y-6 text-start" dir={isRtl ? 'rtl' : 'ltr'}>
           <span className="bg-[var(--secondary)]/10 text-[var(--secondary)] text-xs md:text-sm px-4 py-1.5 rounded-full font-bold inline-block shadow-sm border border-[var(--secondary)]/25">
             {badgeText}
           </span>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-tight text-[var(--foreground)]">
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-snug sm:leading-tight text-[var(--foreground)]">
             {mainTitle} <span className="text-[var(--secondary)]">{highlightedTitle}</span>
           </h1>
-          <p className="text-sm sm:text-base md:text-lg text-[var(--muted-foreground)] leading-relaxed">
+          <p className="text-xs sm:text-base md:text-lg text-[var(--muted-foreground)] leading-relaxed">
             {renderFormattedDescription(description)}
           </p>
           
-          <div className="flex flex-wrap gap-4 pt-2">
-            <Link href="/offers" className="bg-[var(--secondary)] text-white px-6 md:px-8 py-3.5 rounded-xl font-bold shadow-md hover:opacity-90 hover:scale-105 transition-all duration-300 flex items-center gap-2">
+          <div className="flex flex-wrap gap-3 sm:gap-4 pt-2">
+            <Link href="/offers" className="bg-[var(--secondary)] text-white px-5 sm:px-8 py-3.5 rounded-xl font-bold text-xs sm:text-sm shadow-md hover:opacity-90 hover:scale-105 transition-all duration-300 flex items-center gap-2">
               <span>تصفح العروض الحصرية</span>
-              <Tag size={18} />
+              <Tag size={16} />
             </Link>
-            <Link href="/products" className="bg-[var(--card)] text-[var(--foreground)] px-6 md:px-8 py-3.5 rounded-xl font-bold shadow-md border border-[var(--border)] transition-all duration-300 flex items-center gap-2">
+            <Link href="/products" className="bg-[var(--card)] text-[var(--foreground)] px-5 sm:px-8 py-3.5 rounded-xl font-bold text-xs sm:text-sm shadow-md border border-[var(--border)] transition-all duration-300 flex items-center gap-2">
               <span>تصفح المنتجات</span>
-              {isRtl ? <ArrowLeft size={18} /> : <ArrowRight size={18} />}
+              {isRtl ? <ArrowLeft size={16} /> : <ArrowRight size={16} />}
             </Link>
           </div>
         </div>
 
-        {/* كارت الماركات */}
-        <div className="relative h-72 sm:h-80 md:h-96 w-full rounded-3xl overflow-hidden shadow-xl bg-[var(--background)] border border-[var(--border)] flex flex-col items-center justify-center p-6 md:p-8 text-center transition-colors duration-300">
-          <div className="absolute top-4 right-4 bg-[var(--secondary)]/10 text-[var(--secondary)] px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 border border-[var(--secondary)]/20">
+        {/* كارت الماركات - تم التعديل بـ flex-col و gap منتظم لضمان احتواء كافة العناصر وظهور النص السفلي بالكامل */}
+        <div className="relative w-full rounded-3xl overflow-hidden shadow-xl bg-[var(--background)] border border-[var(--border)] flex flex-col justify-between p-6 sm:p-8 text-center transition-colors duration-300">
+          
+          {/* شارة التوكيلات المعتمدة */}
+          <div className="self-end bg-[var(--secondary)]/10 text-[var(--secondary)] px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 border border-[var(--secondary)]/20 mb-4">
             <Award size={14} /> توكيلات معتمدة رسمية
           </div>
           
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full my-auto items-center mt-6">
+          {/* شبكة الماركات */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full items-center my-4">
             {brands.map((brand, idx) => (
-              <div key={idx} className="p-2.5 bg-[var(--card)]/80 backdrop-blur-xs rounded-xl border border-[var(--border)] flex items-center justify-center h-16 shadow-sm hover:border-[var(--secondary)] transition-all duration-300 group/brand">
+              <div key={idx} className="p-3 bg-[var(--card)]/80 backdrop-blur-xs rounded-xl border border-[var(--border)] flex items-center justify-center h-20 shadow-sm hover:border-[var(--secondary)] transition-all duration-300 group/brand overflow-hidden">
                 <img 
                   src={brand.src} 
                   alt={brand.alt} 
-                  className="max-h-10 max-w-full object-contain dark:brightness-95 bg-transparent mix-blend-normal transition-transform duration-300 group-hover/brand:scale-110" 
+                  className="max-h-12 max-w-full object-contain dark:brightness-95 bg-transparent mix-blend-normal transition-transform duration-300 group-hover/brand:scale-110" 
                 />
               </div>
             ))}
           </div>
 
-          <p className="text-xs text-[var(--secondary)] font-bold mt-4">{footerNote}</p>
+          {/* النص السفلي (وكيل حصري...) ظاهر تماماً على جميع الشاشات */}
+          <p className="text-xs sm:text-sm text-[var(--secondary)] font-bold mt-4 w-full text-center">
+            {footerNote}
+          </p>
         </div>
+
       </div>
     </section>
   );

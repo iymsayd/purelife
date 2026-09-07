@@ -14,7 +14,6 @@ export default function ContactClient() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
 
-  // اللينكات المباشرة لجوجل ماب
   const mahallatMarhumMapUrl = "https://www.google.com/maps/place/%D8%B4%D8%B1%D9%83%D8%A9+%D8%A8%D9%8A%D9%88%D8%B1%D9%84%D8%A7%D9%8A%D9%81+%D9%84%D9%84%D8%AA%D9%83%D9%8A%D9%8A%D9%81%D8%A7%D8%AA+%D9%88%D9%81%D9%84%D8%A7%D8%B1+%D8%A7%D9%8لل%D9%85%D9%8A%D8%A7%D8%B7%E2%80%AD/@30.7991156,30.9641935,17z/data=!3m1!4b1!4m6!3m5!1s0x14f7cbc10ca08457:0xf9b8e1fc23752b8f!8m2!3d30.7991156!4d30.9641935!16s%2Fg%2F11nymh5jr2?entry=ttu&g_ep=EgoyMDI2MDgxNi4wIKXMDSoASAFQAw%3D%3D";
   const tantaMapUrl = "https://www.google.com/maps/search/%D8%AD%D9%8ي+%D8%A3%D9%88%D9%84+%D8%B7%D9%86%D8%B7%D8%A7+%D8%B4%D8%A7%D8%B1%D8%B9+%D8%A7%D9%8لل%D9%81%D8%A7%D8%AA%D8%AD+%D8%A8%D8%B1%D8%AC+%D8%A7%D9%8لل%D8%acc%D8%A7%D9%85%D8%B9%D9%8A%D9%86+%D8%A8%D8%جو%D8%A7%D8%B1+%D8%A8%D9%86%D9%83+%D9%85%D8%B5%D8%B5%E2%80%AD/@30.7929722,30.9905756,17z?entry=s&sa=X&ved=1t%3A199789";
 
@@ -48,6 +47,7 @@ export default function ContactClient() {
     message: '',
     address: '',
     email: '',
+    botcheck: '',
   });
 
   useEffect(() => {
@@ -55,36 +55,49 @@ export default function ContactClient() {
     document.documentElement.setAttribute('dir', 'rtl');
     document.documentElement.setAttribute('lang', 'ar');
 
-    const unsubscribeContent = onSnapshot(doc(db, 'site_content', 'contact_page'), (docSnap) => {
-      if (docSnap.exists()) {
-        setContent((prev) => ({ ...prev, ...docSnap.data() }));
-      }
-    });
+    let isMounted = true;
+
+    let unsubscribeContent: any = () => {};
+    try {
+      unsubscribeContent = onSnapshot(doc(db, 'site_content', 'contact_page'), (docSnap) => {
+        if (!isMounted) return;
+        if (docSnap.exists()) {
+          setContent((prev) => ({ ...prev, ...docSnap.data() }));
+        }
+      }, (error) => {
+        console.warn("Skipped content snapshot due to permissions:", error);
+      });
+    } catch (e) {
+      console.warn("Content listener error:", e);
+    }
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (!isMounted) return;
       if (user) {
-        setIsLoggedIn(true);
-        setCurrentUserUid(user.uid);
-        
         let firestoreData: any = {};
         try {
           const userDocRef = doc(db, 'users', user.uid);
           const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
+          if (userDocSnap.exists() && isMounted) {
             firestoreData = userDocSnap.data();
           }
         } catch (err) {
-          console.error("Error fetching user profile data:", err);
+          console.warn("Error fetching user profile data due to rules.");
         }
+
+        if (!isMounted) return;
+
+        setIsLoggedIn(true);
+        setCurrentUserUid(user.uid);
 
         setFormData((prev) => ({
           ...prev,
-          name: user.displayName || firestoreData.name || prev.name,
+          name: user.displayName || firestoreData.name || firestoreData.fullname || prev.name,
           email: user.email || firestoreData.email || prev.email,
           phone: firestoreData.phone || user.phoneNumber || prev.phone,
           address: firestoreData.address || prev.address,
         }));
-      } else {
+      } else if (isMounted) {
         setIsLoggedIn(false);
         setCurrentUserUid(null);
         const savedForm = sessionStorage.getItem('contact_form_draft');
@@ -105,11 +118,16 @@ export default function ContactClient() {
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
+      isMounted = false;
       unsubscribeContent();
       unsubscribeAuth();
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
+
+  const sanitizeText = (text: string) => {
+    return text.replace(/<[^>]*>?/gm, '').trim();
+  };
 
   const handleChange = (field: string, value: string) => {
     if (field === 'email' && isLoggedIn) return;
@@ -122,6 +140,10 @@ export default function ContactClient() {
       return;
     }
 
+    if (field === 'name' || field === 'address' || field === 'subject' || field === 'message') {
+      value = sanitizeText(value);
+    }
+
     const updated = { ...formData, [field]: value };
     setFormData(updated);
     if (!isLoggedIn) sessionStorage.setItem('contact_form_draft', JSON.stringify(updated));
@@ -131,68 +153,75 @@ export default function ContactClient() {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsSubmitting(true);
 
-    const form = e.currentTarget;
-    const data = new FormData(form);
-
-    const finalEmail = isLoggedIn && formData.email ? formData.email : (data.get('email') as string || '');
-    if (finalEmail && !data.get('email')) {
-      data.set('email', finalEmail);
+    if (formData.botcheck) {
+      return;
     }
 
+    if (formData.phone.length < 10 || formData.phone.length > 15) {
+      setModalMessage('يرجى إدخال رقم هاتف صحيح يتكون من 10 إلى 15 رقماً.');
+      return;
+    }
+
+    const lastSubmitTime = localStorage.getItem('last_contact_submit');
+    const cooldownTime = 60000;
+    if (lastSubmitTime && Date.now() - parseInt(lastSubmitTime) < cooldownTime) {
+      const remainingSeconds = Math.ceil((cooldownTime - (Date.now() - parseInt(lastSubmitTime))) / 1000);
+      setModalMessage(`يرجى الانتظار لمدة ${remainingSeconds} ثانية أخرى قبل إرسال رسالة جديدة لتجنب التكرار.`);
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const finalEmail = isLoggedIn && formData.email ? formData.email : (formData.email || 'غير متوفر');
+
     try {
-      // 1. إرسال البيانات لـ Web3Forms للإيميل الخارجي
-      const response = await fetch('https://api.web3forms.com/submit', {
-        method: 'POST',
-        body: data,
-      });
-
-      const result = await response.json();
-
-      if (!result.success) {
-        setModalMessage(result.message || 'حدث خطأ أثناء الإرسال، يرجى المحاولة لاحقاً.');
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 2. حفظ الرسالة في الكولكشن الموحد باسم الحقول الصحيحة والمتوافقة تماماً مع الـ Dashboard
-      await saveUserMessage('contact', {
+      const saveResult = await saveUserMessage('contact_messages', {
         title: formData.subject || 'رسالة تواصل جديدة',
+        subject: formData.subject || 'رسالة تواصل جديدة',
         name: formData.name,
         phone: formData.phone,
         email: finalEmail,
         address: formData.address,
         message: formData.message,
-      }, isLoggedIn ? currentUserUid : null);
+        userId: isLoggedIn ? currentUserUid : 'زائر',
+      });
 
-      // 3. تحديث بيانات البروفايل لو المستخدم مسجل دخول
+      if (!saveResult.success) {
+        setModalMessage('حدث خطأ أثناء حفظ الرسالة، يرجى المحاولة لاحقاً.');
+        setIsSubmitting(false);
+        return;
+      }
+
       if (isLoggedIn && currentUserUid) {
         try {
           const userDocRef = doc(db, 'users', currentUserUid);
           await updateDoc(userDocRef, {
             name: formData.name,
+            fullname: formData.name,
             phone: formData.phone,
             address: formData.address,
             updatedAt: new Date().toISOString()
           });
         } catch (updateError) {
-          console.error("Error updating profile:", updateError);
+          console.warn("Bypassed profile sync due to Firestore rules.");
         }
       }
 
+      localStorage.setItem('last_contact_submit', Date.now().toString());
+
       setIsSubmitted(true);
-      form.reset();
       setFormData((prev) => ({
         ...prev,
         subject: '',
         message: '',
+        botcheck: '',
         ...(isLoggedIn ? {} : { name: '', phone: '', address: '', email: '' })
       }));
       if (!isLoggedIn) sessionStorage.removeItem('contact_form_draft');
     } catch (error) {
       console.error(error);
-      setModalMessage('حدث خطأ في الاتصال بالشبكة أو تحديث البيانات.');
+      setModalMessage('حدث خطأ في الاتصال بالشبكة أو حفظ البيانات.');
     } finally {
       setIsSubmitting(false);
     }
@@ -241,7 +270,7 @@ export default function ContactClient() {
           {content?.title}
         </h1>
         {content?.subtitle && (
-          <p className="text-[var(--foreground)]/70 text-sm sm:text-base max-w-xl mx-auto">
+          <p className="text-[var(--foreground)]/70 text-sm sm:text-base max-w-xl mx-auto px-2">
             {content.subtitle}
           </p>
         )}
@@ -317,17 +346,14 @@ export default function ContactClient() {
               </h2>
               <button
                 onClick={() => setIsSubmitted(false)}
-                className="mt-6 px-8 py-3.5 bg-[var(--secondary)] text-white rounded-xl font-bold hover:opacity-90 transition-all shadow-lg cursor-pointer"
+                className="mt-6 px-8 py-3.5 bg-[var(--secondary)] text-white rounded-xl font-bold hover:opacity-95 transition-all shadow-lg cursor-pointer"
               >
                 {content?.anotherMessageButton}
               </button>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-5 pt-2">
-              <input type="hidden" name="access_key" value="3e5400f1-1eef-42f3-85e4-b42fc416b850" />
-              <input type="hidden" name="subject" value="رسالة جديدة من صفحة تواصل معنا" />
-              
-              <input type="checkbox" name="botcheck" className="hidden" style={{ display: 'none' }} />
+              <input type="checkbox" name="botcheck" className="hidden" style={{ display: 'none' }} value={formData.botcheck} onChange={(e) => setFormData(prev => ({ ...prev, botcheck: e.target.value }))} />
 
               {isLoggedIn && (
                 <div className="flex items-start gap-3 p-4 rounded-2xl bg-[var(--secondary)]/10 border border-[var(--secondary)]/30 text-[var(--foreground)] text-xs sm:text-sm">
@@ -349,6 +375,8 @@ export default function ContactClient() {
                     type="text" 
                     required 
                     autoComplete="name" 
+                    minLength={3}
+                    maxLength={50}
                     value={formData.name}
                     onChange={(e) => handleChange('name', e.target.value)}
                     className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs" 
@@ -365,6 +393,8 @@ export default function ContactClient() {
                     inputMode="numeric"
                     required 
                     autoComplete="tel" 
+                    minLength={10}
+                    maxLength={15}
                     value={formData.phone}
                     onChange={(e) => handleChange('phone', e.target.value)}
                     className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs" 
@@ -381,6 +411,8 @@ export default function ContactClient() {
                   id="subject_field" 
                   type="text" 
                   required 
+                  minLength={3}
+                  maxLength={100}
                   value={formData.subject}
                   onChange={(e) => handleChange('subject', e.target.value)}
                   className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs" 
@@ -397,6 +429,8 @@ export default function ContactClient() {
                     id="address" 
                     type="text" 
                     required 
+                    minLength={5}
+                    maxLength={100}
                     autoComplete="street-address" 
                     value={formData.address}
                     onChange={(e) => handleChange('address', e.target.value)}
@@ -441,6 +475,8 @@ export default function ContactClient() {
                   id="message" 
                   rows={4} 
                   required 
+                  minLength={10}
+                  maxLength={500}
                   value={formData.message}
                   onChange={(e) => handleChange('message', e.target.value)}
                   className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs resize-none"

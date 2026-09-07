@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -15,11 +15,23 @@ export default function Footer() {
   const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [formData, setFormData] = useState({ name: '', email: '', message: '' });
   
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentUserUid, setCurrentUserUid] = useState<string | null>(null);
   const [profileWarning, setProfileWarning] = useState(false);
   const [initialUserData, setInitialUserData] = useState({ name: '', email: '' });
+
+  const [formData, setFormData] = useState({ 
+    name: '', 
+    email: '', 
+    message: '' 
+  });
+
+  const [formErrors, setFormErrors] = useState({
+    name: '',
+    email: '',
+    message: ''
+  });
 
   const [footerData, setFooterData] = useState({
     title: "بيورلايف لحياة أفضل",
@@ -32,50 +44,7 @@ export default function Footer() {
     linkedin: "https://linkedin.com",
   });
 
-  useEffect(() => {
-    setMounted(true);
-    document.documentElement.setAttribute('dir', 'rtl');
-    document.documentElement.setAttribute('lang', 'ar');
-    fetchFooterSettings();
-
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setCurrentUser(user);
-        try {
-          const userDocRef = doc(db, 'users', user.uid);
-          const userDocSnap = await getDoc(userDocRef);
-          if (userDocSnap.exists()) {
-            const userData = userDocSnap.data();
-            const fetchedName = userData.name || user.displayName || '';
-            const fetchedEmail = userData.email || user.email || '';
-            setFormData(prev => ({
-              ...prev,
-              name: fetchedName,
-              email: fetchedEmail
-            }));
-            setInitialUserData({ name: fetchedName, email: fetchedEmail });
-          } else {
-            const fetchedName = user.displayName || '';
-            const fetchedEmail = user.email || '';
-            setFormData(prev => ({
-              ...prev,
-              name: fetchedName,
-              email: fetchedEmail
-            }));
-            setInitialUserData({ name: fetchedName, email: fetchedEmail });
-          }
-        } catch (err) {
-          console.error("Error fetching user profile data:", err);
-        }
-      } else {
-        setCurrentUser(null);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const fetchFooterSettings = async () => {
+  const fetchFooterSettings = useCallback(async () => {
     try {
       const docRef = doc(db, 'settings', 'site_content');
       const docSnap = await getDoc(docRef);
@@ -95,70 +64,130 @@ export default function Footer() {
     } catch (error) {
       console.error("Error fetching footer settings:", error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    setMounted(true);
+    document.documentElement.setAttribute('dir', 'rtl');
+    document.documentElement.setAttribute('lang', 'ar');
+    fetchFooterSettings();
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setCurrentUser(user);
+        setCurrentUserUid(user.uid);
+        try {
+          const userDocRef = doc(db, 'users', user.uid);
+          const userDocSnap = await getDoc(userDocRef);
+          let fetchedName = user.displayName || '';
+          let fetchedEmail = user.email || '';
+
+          if (userDocSnap.exists()) {
+            const userData = userDocSnap.data();
+            fetchedName = userData.name || userData.fullname || user.displayName || '';
+            fetchedEmail = userData.email || user.email || '';
+          }
+
+          setFormData(prev => ({
+            ...prev,
+            name: fetchedName,
+            email: fetchedEmail
+          }));
+          setInitialUserData({ name: fetchedName, email: fetchedEmail });
+        } catch (err) {
+          console.error("Error fetching user profile data:", err);
+        }
+      } else {
+        setCurrentUser(null);
+        setCurrentUserUid(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [fetchFooterSettings]);
+
+  const validateField = useCallback((field: string, value: string, isUserLoggedIn: boolean) => {
+    let error = '';
+    if (field === 'name') {
+      if (!value.trim()) error = 'الاسم مطلوب.';
+      else if (value.trim().length < 3) error = 'الاسم يجب ألا يقل عن 3 أحرف.';
+    } else if (field === 'email' && !isUserLoggedIn) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (value.trim() && !emailRegex.test(value)) error = 'البريد الإلكتروني غير صحيح.';
+    } else if (field === 'message') {
+      if (!value.trim()) error = 'الرسالة مطلوبة.';
+      else if (value.trim().length < 3) error = 'يرجى كتابة رسالة صحيحة.';
+    }
+    setFormErrors(prev => ({ ...prev, [field]: error }));
+    return error;
+  }, []);
 
   const handleInputChange = (field: string, value: string) => {
+    if (field === 'email' && currentUser) return;
+
     setFormData(prev => ({ ...prev, [field]: value }));
+    
     if (currentUser) {
-      if (field === 'name' && value !== initialUserData.name) {
-        setProfileWarning(true);
-      } else if (field === 'name' && value === initialUserData.name) {
-        setProfileWarning(false);
+      if (field === 'name') {
+        if (value !== initialUserData.name) {
+          setProfileWarning(true);
+        } else {
+          setProfileWarning(false);
+        }
       }
     }
+
+    validateField(field, value, !!currentUser);
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    const nameErr = validateField('name', formData.name, !!currentUser);
+    const emailErr = !currentUser ? validateField('email', formData.email, !!currentUser) : '';
+    const messageErr = validateField('message', formData.message, !!currentUser);
+
+    if (nameErr || emailErr || messageErr) {
+      alert("يرجى تصحيح الأخطاء الموجودة في الحقول قبل إرسال الرسالة.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const response = await fetch("https://api.web3forms.com/submit", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          access_key: "79c05689-b21d-4952-ae81-186d3819cd88",
-          name: formData.name.trim(),
-          email: formData.email.trim(),
-          message: formData.message.trim(),
-          subject: `رسالة جديدة من موقع Pure Life بواسطة ${formData.name}`,
-        }),
+      const finalEmail = currentUser && currentUser.email ? currentUser.email : formData.email.trim();
+
+      await saveUserMessage('footer_messages', {
+        name: formData.name.trim(),
+        email: finalEmail,
+        message: formData.message.trim(),
+        userId: currentUserUid ? currentUserUid : 'زائر (بدون حساب)'
       });
 
-      const result = await response.json();
-      if (result.success) {
-        await saveUserMessage('footer', {
-          name: formData.name.trim(),
-          email: formData.email.trim(),
-          message: formData.message.trim(),
-        }, currentUser ? currentUser.uid : null);
-
-        if (currentUser && formData.name.trim() !== initialUserData.name) {
-          try {
-            const userRef = doc(db, 'users', currentUser.uid);
-            await updateDoc(userRef, { name: formData.name.trim() });
-            setInitialUserData(prev => ({ ...prev, name: formData.name.trim() }));
-          } catch (updateErr) {
-            console.error("Error updating profile name:", updateErr);
-          }
+      if (currentUser && currentUserUid && formData.name.trim() !== initialUserData.name) {
+        try {
+          const userRef = doc(db, 'users', currentUserUid);
+          await updateDoc(userRef, { 
+            name: formData.name.trim(),
+            updatedAt: new Date().toISOString()
+          });
+          setInitialUserData(prev => ({ ...prev, name: formData.name.trim() }));
+        } catch (updateErr) {
+          console.error("Error updating profile name:", updateErr);
         }
-
-        setSubmitted(true);
-        setProfileWarning(false);
-        setFormData({ 
-          name: currentUser ? (initialUserData.name || currentUser.displayName || '') : '', 
-          email: currentUser ? (initialUserData.email || currentUser.email || '') : '', 
-          message: '' 
-        });
-        setTimeout(() => setSubmitted(false), 5000);
-      } else {
-        alert("حدث خطأ أثناء الإرسال، حاول مرة أخرى.");
       }
+
+      setSubmitted(true);
+      setProfileWarning(false);
+      setFormData({ 
+        name: currentUser ? (initialUserData.name || currentUser.displayName || '') : '', 
+        email: currentUser ? (initialUserData.email || currentUser.email || '') : '', 
+        message: '' 
+      });
+      setTimeout(() => setSubmitted(false), 5000);
     } catch (error) {
-      alert("تعذر الاتصال بالخادم.");
+      console.error("Error submitting footer message:", error);
+      alert("تعذر الاتصال بالخادم أو حفظ الرسالة، حاول مرة أخرى.");
     } finally {
       setLoading(false);
     }
@@ -211,33 +240,74 @@ export default function Footer() {
 
           <section className="text-right">
             <h4 className={headingClass}>تواصل معنا</h4>
-            <form className="flex flex-col gap-3" onSubmit={handleSubmit}>
+            <form className="flex flex-col gap-3" onSubmit={handleSubmit} noValidate>
               <div>
                 <label htmlFor="footer-name" className={labelClass}>الاسم</label>
-                <input id="footer-name" type="text" required value={formData.name} onChange={(e) => handleInputChange('name', e.target.value)} className={inputClass} />
+                <input 
+                  id="footer-name" 
+                  type="text" 
+                  required 
+                  value={formData.name} 
+                  onChange={(e) => handleInputChange('name', e.target.value)} 
+                  onBlur={() => validateField('name', formData.name, !!currentUser)}
+                  className={`${inputClass} ${formErrors.name ? 'border-red-500' : ''}`} 
+                  placeholder=" الاسم "
+                />
+                {formErrors.name && <span className="block text-[10px] text-red-400 mt-1 font-bold">{formErrors.name}</span>}
               </div>
+
               <div>
-                <label htmlFor="footer-email" className={labelClass}>البريد الالكتروني</label>
-                <input id="footer-email" type="email" required disabled={!!currentUser} value={formData.email} onChange={(e) => handleInputChange('email', e.target.value)} className={`${inputClass} ${currentUser ? 'opacity-70 cursor-not-allowed' : ''}`} />
+                <label htmlFor="footer-email" className={labelClass}>
+                  البريد الالكتروني {currentUser && <span className="text-[10px] text-[#0ea5e9] font-normal">(مسجل بحسابك)</span>}
+                </label>
+                <input 
+                  id="footer-email" 
+                  type="email" 
+                  required 
+                  disabled={!!currentUser} 
+                  value={formData.email} 
+                  onChange={(e) => handleInputChange('email', e.target.value)} 
+                  onBlur={() => !currentUser && validateField('email', formData.email, !!currentUser)}
+                  className={`${inputClass} ${currentUser ? 'opacity-75 cursor-not-allowed bg-gray-800' : ''} ${formErrors.email ? 'border-red-500' : ''}`} 
+                  placeholder="name@example.com"
+                />
+                {formErrors.email && <span className="block text-[10px] text-red-400 mt-1 font-bold">{formErrors.email}</span>}
               </div>
+
               {profileWarning && (
                 <p className="text-amber-400 text-[11px] font-medium leading-tight">
-                  تنبيه: أنت عدلت بياناتك، سيتم تحديث حسابك الأساسي تلقائياً عند الإرسال.
+                  تنبيه: أنت عدلت اسمك، سيتم تحديث حسابك الأساسي تلقائياً عند الإرسال.
                 </p>
               )}
+
               <div>
                 <label htmlFor="footer-message" className={labelClass}>الرسالة</label>
-                <textarea id="footer-message" rows={2} required value={formData.message} onChange={(e) => handleInputChange('message', e.target.value)} className={`${inputClass} resize-y min-h-[70px] max-h-[140px]`} />
+                <textarea 
+                  id="footer-message" 
+                  rows={2} 
+                  required 
+                  value={formData.message} 
+                  onChange={(e) => handleInputChange('message', e.target.value)} 
+                  onBlur={() => validateField('message', formData.message, !!currentUser)}
+                  className={`${inputClass} resize-y min-h-[70px] max-h-[140px] ${formErrors.message ? 'border-red-500' : ''}`} 
+                  placeholder="أكتب رسالتك أو استفسارك هنا..."
+                />
+                {formErrors.message && <span className="block text-[10px] text-red-400 mt-1 font-bold">{formErrors.message}</span>}
               </div>
-              <button type="submit" disabled={loading} className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white transition-colors py-3 rounded-xl font-bold cursor-pointer mt-1 text-xs md:text-sm shadow-sm disabled:opacity-50">
+
+              <button 
+                type="submit" 
+                disabled={loading} 
+                className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white transition-colors py-3 rounded-xl font-bold cursor-pointer mt-1 text-xs md:text-sm shadow-sm disabled:opacity-50"
+              >
                 {loading ? "جاري الإرسال..." : "إرسال الطلب"}
               </button>
+
               {submitted && (<p className="text-emerald-400 text-xs font-semibold mt-1 text-center animate-pulse">تم إرسال رسالتك بنجاح!</p>)}
             </form>
           </section>
         </div>
 
-        {/* حقوق النشر والسياسات */}
         <div className="text-center text-gray-500 text-xs md:text-sm border-t border-gray-900 pt-8 space-y-4">
           <p>© {new Date().getFullYear()} بيورلايف - جميع الحقوق محفوظة</p>
           <div className="flex justify-center gap-6">

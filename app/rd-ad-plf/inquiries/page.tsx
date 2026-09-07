@@ -67,11 +67,11 @@ export default function AdminComplaintsPage() {
     try {
       let querySnapshot;
       try {
-        const q = query(collection(db, 'complaints_messages'), orderBy('createdAt', 'desc'));
+        const q = query(collection(db, 'complaints'), orderBy('createdAt', 'desc'));
         querySnapshot = await getDocs(q);
       } catch (orderErr) {
         // Fallback في حال عدم وجود Index للترتيب
-        querySnapshot = await getDocs(collection(db, 'complaints_messages'));
+        querySnapshot = await getDocs(collection(db, 'complaints'));
       }
 
       const list: ComplaintMessage[] = [];
@@ -102,7 +102,7 @@ export default function AdminComplaintsPage() {
   const toggleStatus = async (id: string, currentStatus?: string) => {
     try {
       const newStatus = currentStatus === 'resolved' ? 'new' : 'resolved';
-      await updateDoc(doc(db, 'complaints_messages', id), { status: newStatus });
+      await updateDoc(doc(db, 'complaints', id), { status: newStatus });
       setMessages(messages.map(m => m.id === id ? { ...m, status: newStatus } : m));
       setAppMessage({ text: 'تم تحديث حالة الرسالة بنجاح.', type: 'success' });
       setTimeout(() => setAppMessage(null), 3000);
@@ -122,7 +122,7 @@ export default function AdminComplaintsPage() {
     }
 
     try {
-      await deleteDoc(doc(db, 'complaints_messages', id));
+      await deleteDoc(doc(db, 'complaints', id));
       setMessages(messages.filter(m => m.id !== id));
       setAppMessage({ text: 'تم حذف الرسالة بنجاح.', type: 'success' });
       setTimeout(() => setAppMessage(null), 3000);

@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
-import { X, Plus, Tag, Sparkles, CheckCircle2, ArrowLeft, Loader2, Info, Lock } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { X, Tag, Sparkles, CheckCircle2, ArrowLeft, Loader2, Info, Lock } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -14,9 +14,21 @@ const colors = [
   "border-teal-300 dark:border-teal-800 text-teal-800 dark:text-teal-200 bg-teal-50 dark:bg-teal-950/50"
 ];
 
-function InputField({ label, name, type, required, placeholder, value, onChange }: any) {
+interface InputFieldProps {
+  label: string;
+  name: string;
+  type: string;
+  required?: boolean;
+  placeholder: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  error?: string;
+  onBlur?: () => void;
+}
+
+function InputField({ label, name, type, required, placeholder, value, onChange, error, onBlur }: InputFieldProps) {
   return (
-    <div className="text-right">
+    <div className="text-right w-full">
       <label className="block text-sm font-bold mb-2">{label}</label>
       <input 
         type={type} 
@@ -24,9 +36,11 @@ function InputField({ label, name, type, required, placeholder, value, onChange 
         required={required} 
         value={value}
         onChange={onChange}
+        onBlur={onBlur}
         placeholder={placeholder}
-        className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs text-sm font-semibold text-right"
+        className={`w-full p-3.5 rounded-2xl border bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs text-sm font-semibold text-right ${error ? 'border-red-500 focus:ring-red-500' : 'border-[var(--border)]'}`}
       />
+      {error && <span className="block text-xs font-bold text-red-500 mt-1.5">{error}</span>}
     </div>
   );
 }
@@ -47,6 +61,13 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
     address: '',
     email: '',
     message: ''
+  });
+
+  const [formErrors, setFormErrors] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    email: ''
   });
 
   useEffect(() => {
@@ -99,25 +120,44 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
     };
   }, []);
 
+  const validateField = useCallback((field: string, value: string, loggedInState: boolean) => {
+    let error = '';
+    if (field === 'name') {
+      if (!value.trim()) error = 'الاسم مطلوب.';
+      else if (value.trim().length < 3) error = 'الاسم يجب ألا يقل عن 3 أحرف.';
+    } else if (field === 'phone') {
+      const cleanPhone = value.replace(/\D/g, '');
+      if (!value.trim()) error = 'رقم الهاتف مطلوب.';
+      else if (cleanPhone.length < 10) error = 'رقم الهاتف غير صحيح (يجب ألا يقل عن 10 أرقام).';
+    } else if (field === 'address') {
+      if (!value.trim()) error = 'العنوان مطلوب.';
+      else if (value.trim().length < 5) error = 'يرجى كتابة العنوان بشكل مفصل وصحيح.';
+    } else if (field === 'email' && !loggedInState && value.trim() !== '') {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(value)) error = 'البريد الإلكتروني غير صحيح.';
+    }
+    setFormErrors(prev => ({ ...prev, [field]: error }));
+    return error;
+  }, []);
+
   const handleFieldChange = (field: string, value: string) => {
     if (field === 'email' && isLoggedIn) return;
 
+    let processedValue = value;
     if (field === 'phone') {
-      const filteredPhone = value.replace(/[^\d\s+\-()]/g, '');
-      const updated = { ...formDataState, phone: filteredPhone };
-      setFormDataState(updated);
-      if (!isLoggedIn) sessionStorage.setItem('offer_form_draft', JSON.stringify(updated));
-      if (isLoggedIn) setDataModified(true);
-      return;
+      processedValue = value.replace(/[^\d\s+\-()]/g, '').slice(0, 15);
     }
 
-    const updated = { ...formDataState, [field]: value };
-    setFormDataState(updated);
-    if (!isLoggedIn) sessionStorage.setItem('offer_form_draft', JSON.stringify(updated));
+    setFormDataState(prev => {
+      const updated = { ...prev, [field]: processedValue };
+      if (!isLoggedIn) {
+        sessionStorage.setItem('offer_form_draft', JSON.stringify(updated));
+      }
+      return updated;
+    });
 
-    if (isLoggedIn) {
-      setDataModified(true);
-    }
+    if (isLoggedIn) setDataModified(true);
+    validateField(field, processedValue, isLoggedIn);
   };
 
   const getOfferTitle = (s: string) => {
@@ -128,12 +168,22 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (selectedOffers.length === 0) return;
+
+    const nameErr = validateField('name', formDataState.name, isLoggedIn);
+    const phoneErr = validateField('phone', formDataState.phone, isLoggedIn);
+    const addressErr = validateField('address', formDataState.address, isLoggedIn);
+    const emailErr = validateField('email', formDataState.email, isLoggedIn);
+
+    if (nameErr || phoneErr || addressErr || emailErr) {
+      return;
+    }
+
     setSubmitting(true);
 
     const formElement = e.currentTarget;
     const dataToSend = new FormData(formElement);
     
-    const finalEmail = isLoggedIn && formDataState.email ? formDataState.email : formDataState.email;
+    const finalEmail = formDataState.email;
     if (finalEmail) {
       dataToSend.set('email', finalEmail);
     }
@@ -162,16 +212,16 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
         sessionStorage.removeItem('offer_form_draft');
       }
 
-      // تم التعديل هنا إلى 'offers' ليتطابق مع الـ collectionsMap
-      await saveUserMessage('offers', {
+      await saveUserMessage('offer_requests', {
         title: `طلب عرض: ${offersTitlesText}`,
         name: formDataState.name,
         phone: formDataState.phone,
         address: formDataState.address,
-        email: finalEmail,
+        email: finalEmail || 'لم يتم تسجيله',
         selectedOffers: selectedOffers.map(s => getOfferTitle(s)),
         message: formDataState.message || 'لا توجد ملاحظات إضافية',
-      }, isLoggedIn ? currentUserUid : null);
+        userId: isLoggedIn && currentUserUid ? currentUserUid : 'زائر (بدون حساب)',
+      });
 
       if (isLoggedIn && currentUserUid) {
         try {
@@ -199,29 +249,29 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
   const otherOffers = allOffers?.filter(o => o.slug !== slug) || [];
 
   return (
-    <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20 text-center space-y-12 max-w-4xl" dir="rtl">
+    <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-20 text-center space-y-12 max-w-4xl overflow-x-hidden" dir="rtl">
       
       {offer.image && (
-        <div className="w-full h-80 md:h-[450px] rounded-[2.5rem] overflow-hidden shadow-2xl border border-[var(--border)] relative group bg-[var(--secondary)]/5">
+        <div className="w-full h-72 sm:h-80 md:h-[450px] rounded-[2rem] md:rounded-[2.5rem] overflow-hidden shadow-2xl border border-[var(--border)] relative group bg-[var(--secondary)]/5">
           <img src={offer.image} alt={offer.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-40"></div>
         </div>
       )}
 
-      <div className="inline-flex items-center gap-2 px-6 py-2.5 rounded-2xl font-black text-base md:text-lg shadow-sm border border-[var(--border)] bg-[var(--background)] text-[var(--secondary)]">
-        <Tag size={20} />
+      <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-sm sm:text-base md:text-lg shadow-sm border border-[var(--border)] bg-[var(--background)] text-[var(--secondary)]">
+        <Tag size={18} />
         <span>نسبة الخصم: 20%</span>
       </div>
 
-      <div className="space-y-6">
-        <h1 className="text-4xl md:text-6xl font-black tracking-tight text-[var(--secondary)]">خصم 20% على فلاتر المياه</h1>
-        <p className="font-medium max-w-3xl mx-auto text-lg md:text-xl leading-relaxed opacity-85">{offer.desc}</p>
+      <div className="space-y-4 sm:space-y-6 px-2">
+        <h1 className="text-3xl sm:text-4xl md:text-6xl font-black tracking-tight text-[var(--secondary)] leading-tight">خصم 20% على فلاتر المياه</h1>
+        <p className="font-medium max-w-3xl mx-auto text-base sm:text-lg md:text-xl leading-relaxed opacity-85">{offer.desc}</p>
       </div>
 
       <div className="pt-2">
         <button 
           onClick={() => { setSuccessMessage(false); setShowModal(true); }} 
-          className="px-12 py-5 rounded-2xl font-black text-xl transition-all cursor-pointer shadow-xl hover:scale-105 duration-300 flex items-center gap-3 mx-auto bg-[var(--secondary)] hover:opacity-95 text-white"
+          className="w-full sm:w-auto px-8 sm:px-12 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl transition-all cursor-pointer shadow-xl hover:scale-105 duration-300 flex items-center justify-center gap-3 mx-auto bg-[var(--secondary)] hover:opacity-95 text-white"
         >
           <Sparkles size={24} />
           <span>استمتع بالعرض الآن</span>
@@ -229,26 +279,26 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
       </div>
 
       {otherOffers.length > 0 && (
-        <div className="pt-16 border-t border-[var(--border)] mt-16 text-right">
+        <div className="pt-12 sm:pt-16 border-t border-[var(--border)] mt-16 text-right">
           <h2 className="text-2xl md:text-3xl font-black mb-8 text-center">
             عروض أخرى قد تهمك
           </h2>
-          <div className="flex gap-6 overflow-x-auto pb-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" dir="rtl">
+          <div className="flex gap-4 sm:gap-6 overflow-x-auto pb-6 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" dir="rtl">
             {otherOffers.map((item) => {
               const itemTitle = item.title;
               return (
                 <a 
                   key={item.slug}
                   href={`/offers/${item.slug}`}
-                  className="min-w-[280px] md:min-w-[320px] max-w-[320px] p-5 rounded-[2rem] border border-[var(--border)] bg-[var(--background)] shadow-xl flex-shrink-0 flex flex-col justify-between transition-all hover:scale-[1.02] hover:border-[var(--secondary)]"
+                  className="min-w-[260px] sm:min-w-[280px] md:min-w-[320px] max-w-[320px] p-4 sm:p-5 rounded-[2rem] border border-[var(--border)] bg-[var(--background)] shadow-xl flex-shrink-0 flex flex-col justify-between transition-all hover:scale-[1.02] hover:border-[var(--secondary)]"
                 >
                   <div>
                     {item.image && (
-                      <div className="w-full h-40 rounded-2xl overflow-hidden mb-4 border border-[var(--border)] bg-[var(--secondary)]/5">
+                      <div className="w-full h-36 sm:h-40 rounded-2xl overflow-hidden mb-4 border border-[var(--border)] bg-[var(--secondary)]/5">
                         <img src={item.image} alt={itemTitle} className="w-full h-full object-cover" />
                       </div>
                     )}
-                    <h3 className="font-extrabold text-lg mb-2 line-clamp-1">{itemTitle}</h3>
+                    <h3 className="font-extrabold text-base sm:text-lg mb-2 line-clamp-1">{itemTitle}</h3>
                     {item.discount && <p className="text-xs font-bold text-[var(--secondary)] mb-3">{item.discount}</p>}
                   </div>
                   <div className="flex items-center gap-2 text-sm font-bold pt-2 border-t border-[var(--border)] mt-2 text-[var(--secondary)]">
@@ -263,22 +313,22 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
       )}
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn" onClick={() => setShowModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-fadeIn" onClick={() => setShowModal(false)}>
           <div 
-            className="w-full max-w-lg p-6 md:p-8 rounded-[2.5rem] relative shadow-2xl max-h-[90vh] overflow-y-auto bg-[var(--background)] text-[var(--foreground)] border border-[var(--border)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" 
+            className="w-full max-w-lg p-5 sm:p-6 md:p-8 rounded-[2rem] sm:rounded-[2.5rem] relative shadow-2xl max-h-[90vh] overflow-y-auto bg-[var(--background)] text-[var(--foreground)] border border-[var(--border)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" 
             dir="rtl"
             onClick={e => e.stopPropagation()}
           >
             <button 
               type="button"
-              className="absolute top-5 start-5 cursor-pointer p-2.5 rounded-full transition-colors border border-[var(--border)] bg-[var(--secondary)]/10 text-[var(--foreground)] hover:bg-[var(--secondary)]/20" 
+              className="absolute top-4 sm:top-5 start-4 sm:start-5 cursor-pointer p-2 sm:p-2.5 rounded-full transition-colors border border-[var(--border)] bg-[var(--secondary)]/10 text-[var(--foreground)] hover:bg-[var(--secondary)]/20" 
               onClick={() => setShowModal(false)}
             >
               <X size={18} />
             </button>
             
             {successMessage ? (
-              <div className="py-12 text-center space-y-6">
+              <div className="py-10 sm:py-12 text-center space-y-6">
                 <div className="w-20 h-20 mx-auto rounded-full flex items-center justify-center border border-[var(--border)] bg-[var(--secondary)]/10 text-green-500 shadow-lg">
                   <CheckCircle2 size={48} className="animate-bounce" />
                 </div>
@@ -286,23 +336,23 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
                   <h3 className="text-2xl font-black">
                     تم الإرسال بنجاح!
                   </h3>
-                  <p className="text-base font-semibold opacity-80">
+                  <p className="text-sm sm:text-base font-semibold opacity-80 px-2">
                     سنتواصل معك في أقرب وقت لتأكيد الطلب وتم تحديث بياناتك الشخصية بنجاح.
                   </p>
                 </div>
                 <button 
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="w-full py-4 bg-[var(--secondary)] hover:opacity-95 text-white rounded-2xl font-black transition-all cursor-pointer shadow-lg text-lg"
+                  className="w-full py-3.5 sm:py-4 bg-[var(--secondary)] hover:opacity-95 text-white rounded-2xl font-black transition-all cursor-pointer shadow-lg text-base sm:text-lg"
                 >
                   إغلاق
                 </button>
               </div>
             ) : (
               <>
-                <div className="mb-8 text-center pt-2">
-                  <h2 className="text-3xl font-black mb-2">طلب العرض</h2>
-                  <p className="text-sm font-semibold opacity-70">املأ البيانات أدناه وسيتواصل فريقنا معك لتأكيد الطلب</p>
+                <div className="mb-6 sm:mb-8 text-center pt-2">
+                  <h2 className="text-2xl sm:text-3xl font-black mb-2">طلب العرض</h2>
+                  <p className="text-xs sm:text-sm font-semibold opacity-70">املأ البيانات أدناه وسيتواصل فريقنا معك لتأكيد الطلب</p>
                 </div>
                 
                 {dataModified && (
@@ -312,36 +362,46 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
                   </div>
                 )}
 
-                <form className="space-y-5" onSubmit={handleSubmit}>
+                <form className="space-y-4 sm:space-y-5" onSubmit={handleSubmit} noValidate>
+                  <input type="checkbox" name="botcheck" className="hidden" style={{ display: 'none' }} />
+
                   <InputField 
                     label="الاسم بالكامل" 
                     name="name" 
                     type="text" 
                     required 
                     value={formDataState.name}
-                    onChange={(e: any) => handleFieldChange('name', e.target.value)}
+                    onChange={(e) => handleFieldChange('name', e.target.value)}
+                    onBlur={() => validateField('name', formDataState.name, isLoggedIn)}
                     placeholder="أدخل اسمك الكامل" 
+                    error={formErrors.name}
                   />
+
                   <InputField 
                     label="رقم الهاتف" 
                     name="phone" 
                     type="tel" 
                     required 
                     value={formDataState.phone}
-                    onChange={(e: any) => handleFieldChange('phone', e.target.value)}
-                    placeholder="01xxxxxxxx" 
+                    onChange={(e) => handleFieldChange('phone', e.target.value)}
+                    onBlur={() => validateField('phone', formDataState.phone, isLoggedIn)}
+                    placeholder="أدخل رقم هاتفك مع الرمز الدولي" 
+                    error={formErrors.phone}
                   />
+
                   <InputField 
                     label="العنوان" 
                     name="address" 
                     type="text" 
                     required 
                     value={formDataState.address}
-                    onChange={(e: any) => handleFieldChange('address', e.target.value)}
-                    placeholder="المدينة، الدوار، الشارع" 
+                    onChange={(e) => handleFieldChange('address', e.target.value)}
+                    onBlur={() => validateField('address', formDataState.address, isLoggedIn)}
+                    placeholder="المدينة، المنطقة، الشارع بالتفصيل" 
+                    error={formErrors.address}
                   />
 
-                  <div className="text-right">
+                  <div className="text-right w-full">
                     <div className="flex items-center justify-between mb-2">
                       <label className="block text-sm font-bold mb-1">
                         البريد الإلكتروني {!isLoggedIn && <span className="text-xs opacity-60 font-normal">(اختياري)</span>}
@@ -358,19 +418,21 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
                       value={formDataState.email}
                       disabled={isLoggedIn}
                       onChange={(e) => handleFieldChange('email', e.target.value)}
+                      onBlur={() => !isLoggedIn && validateField('email', formDataState.email, isLoggedIn)}
                       placeholder="name@example.com"
-                      className={`w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs text-sm font-semibold text-right ${isLoggedIn ? 'opacity-75 cursor-not-allowed bg-[var(--secondary)]/5' : ''}`}
+                      className={`w-full p-3.5 rounded-2xl border bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs text-sm font-semibold text-right ${formErrors.email ? 'border-red-500 focus:ring-red-500' : 'border-[var(--border)]'} ${isLoggedIn ? 'opacity-75 cursor-not-allowed bg-[var(--secondary)]/5' : ''}`}
                     />
+                    {formErrors.email && <span className="block text-xs font-bold text-red-500 mt-1.5">{formErrors.email}</span>}
                   </div>
 
                   <div className="text-right">
                     <label className="block text-sm font-bold mb-2">العروض المختارة:</label>
                     <div className="flex flex-wrap gap-2 mb-3">
                       {selectedOffers.map((s, index) => (
-                        <div key={s} className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs md:text-sm font-bold border shadow-sm ${colors[index % colors.length]}`}>
-                          <span>{getOfferTitle(s)}</span>
+                        <div key={s} className={`flex items-center gap-2 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs md:text-sm font-bold border shadow-sm ${colors[index % colors.length]}`}>
+                          <span className="truncate max-w-[200px]">{getOfferTitle(s)}</span>
                           {selectedOffers.length > 1 && (
-                            <button type="button" onClick={() => setSelectedOffers(selectedOffers.filter(x => x !== s))} className="hover:opacity-75 transition cursor-pointer">
+                            <button type="button" onClick={() => setSelectedOffers(selectedOffers.filter(x => x !== s))} className="hover:opacity-75 transition cursor-pointer shrink-0">
                               <X size={14} />
                             </button>
                           )}
@@ -392,9 +454,9 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
                       <button 
                         type="button" 
                         onClick={() => { if(newOffer && !selectedOffers.includes(newOffer)) { setSelectedOffers([...selectedOffers, newOffer]); setNewOffer(""); } }} 
-                        className="px-5 rounded-2xl transition cursor-pointer flex items-center justify-center hover:opacity-90 shadow-md bg-[var(--secondary)] text-white"
+                        className="px-5 sm:px-6 rounded-2xl transition cursor-pointer flex items-center justify-center hover:opacity-90 shadow-md bg-[var(--secondary)] text-white text-sm font-bold shrink-0"
                       >
-                        <Plus size={22} />
+                        إضافة
                       </button>
                     </div>
                   </div>
@@ -404,8 +466,8 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
                     <textarea 
                       name="message" 
                       value={formDataState.message}
-                      onChange={(e) => handleFieldChange('message', e.target.value)}
-                      className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs resize-none min-h-[100px] text-sm font-semibold text-right" 
+                      onChange={(e) => setFormDataState(prev => ({ ...prev, message: e.target.value }))}
+                      className="w-full p-3.5 rounded-2xl border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] focus:ring-2 focus:ring-[var(--secondary)] outline-none transition-all shadow-xs resize-none min-h-[90px] sm:min-h-[100px] text-sm font-semibold text-right" 
                       placeholder="أكتب ملاحظاتك أو موعد التركيب المناسب..."
                     ></textarea>
                   </div>
@@ -413,11 +475,11 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
                   <button 
                     disabled={submitting || selectedOffers.length === 0} 
                     type="submit" 
-                    className="w-full bg-[var(--secondary)] hover:opacity-95 text-white py-4 rounded-2xl font-black text-lg transition-all duration-300 shadow-xl cursor-pointer flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full bg-[var(--secondary)] hover:opacity-95 text-white py-3.5 sm:py-4 rounded-2xl font-black text-base sm:text-lg transition-all duration-300 shadow-xl cursor-pointer flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {submitting ? (
                       <>
-                        <Loader2 className="animate-spin" size={24} />
+                        <Loader2 className="animate-spin" size={22} />
                         <span>جاري الإرسال...</span>
                       </>
                     ) : (

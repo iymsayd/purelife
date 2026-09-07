@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
@@ -16,6 +16,10 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [selectedActivity, setSelectedActivity] = useState<any | null>(null);
 
+  // حالات التقسيم إلى صفحات (Pagination)
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+
   const requestTypes = [
     { id: 'all', label: 'الكل' },
     { id: 'maintenance', label: 'الصيانة' },
@@ -27,7 +31,6 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
     { id: 'contact', label: 'تواصل معنا' },
   ];
 
-  // خريطة الكولكشنز مع استثناء الكولكشنز التي تتطلب صلاحيات أمنية خاصة للمستخدم العادي
   const collectionsMap: Record<string, string[]> = {
     maintenance: ['maintenance_requests', 'maintenance'],
     complaints: ['complaints', 'suggestions'],
@@ -35,7 +38,7 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
     contact: ['contact_messages', 'contact', 'messages'],
     events: ['event_bookings', 'events', 'eventRequests'],
     offers: ['offer_requests', 'offers', 'offerRequests'],
-    footer: ['footer_messages', 'footerMessages', 'footer'], // سيتم جلبها بحذر أو بأمان لتجنب خطأ الـ permissions
+    footer: ['footer_messages', 'footerMessages', 'footer'],
   };
 
   const parseSafeDate = (timestamp: any): Date => {
@@ -75,19 +78,14 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
               const colRef = collection(db, colName);
               let querySnapshot;
 
-              // للتعامل مع كولكشن الفوتر أو الكولكشن المحمية دون تفجير خطأ الـ Permissions،
-              // نقوم بعمل Query بالفلترة (where) إن أمكن أو محاولة جلبها بأمان، وإذا فشلت نتخطاها بصمت.
               try {
                 if (key === 'footer' && userEmail) {
-                  // محاولة جلب رسائل الفوتر المرتبطة ببريد المستخدم فقط لتجنب جلب كل المستندات
                   const qEmail = query(colRef, where('email', '==', userEmail));
                   querySnapshot = await getDocs(qEmail);
                 } else {
                   querySnapshot = await getDocs(colRef);
                 }
               } catch (innerErr) {
-                // في حال رفض الصلاحيات (Permission Denied) لكولكشن معين، نتجاهله تماماً ولا نكسر التطبيق
-                console.warn(`Skipped collection ${colName} due to permissions.`);
                 continue;
               }
 
@@ -141,27 +139,55 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
     fetchActivities();
   }, [user]);
 
+  // دعم إغلاق المودال بزر Esc من لوحة المفاتيح لمنع تسريب الذاكرة وتحسين الاستجابة
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedActivity) {
+        setSelectedActivity(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedActivity]);
+
   const filteredActivities = filter === 'all' 
     ? activities 
     : activities.filter((item) => item.sourceCollection === filter);
 
+  // حساب العناصر والصفحات الحالية
+  const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentActivities = filteredActivities.slice(indexOfFirstItem, indexOfLastItem);
+
+  const handlePageChange = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleFilterChange = (typeId: string) => {
+    setFilter(typeId);
+    setCurrentPage(1);
+  };
+
   const excludeFields = ['id', 'sourceCollection', 'originalCollection', 'typeLabel', 'userId', 'uid', 'createdAt', 'date', 'timestamp', 'status', 'parsedDate', 'email', 'name', 'fullName', 'applicantName', 'phone', 'phoneNumber', 'mobile', 'message', 'note', 'details', 'coverLetter', 'address', 'location', 'city'];
 
   return (
-    <div className="bg-card text-card-foreground rounded-3xl shadow-xl shadow-black/5 border border-border/80 p-6 sm:p-10 transition-all duration-300" dir="rtl">
-      <div className="text-center sm:text-right mb-10">
+    <div className="bg-card text-card-foreground rounded-3xl shadow-xl shadow-black/5 border border-border/80 p-5 sm:p-8 md:p-10 transition-all duration-300 w-full max-w-full overflow-hidden" dir="rtl">
+      <div className="text-center sm:text-right mb-8">
         <h2 className="text-2xl sm:text-3xl font-black text-foreground mb-2 tracking-tight">طلبات الخدمات والأنشطة</h2>
-        <p className="text-xs sm:text-sm font-semibold text-[#0ea5e9]">
+        <p className="text-xs sm:text-sm font-semibold text-[#0ea5e9] leading-relaxed">
           تتبع حالة طلبات الصيانة، التوظيف، العروض، الأحداث، رسائل الفوتر، والشكاوى بكل سهولة عبر سجلك المرتبط بالبريد الإلكتروني.
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2.5 mb-8">
+      {/* أزرار الفلترة متجاوبة مع الأجهزة المختلفة */}
+      <div className="flex flex-wrap gap-2 mb-8 pb-4 border-b border-border/60">
         {requestTypes.map((type) => (
           <button
             key={type.id}
-            onClick={() => setFilter(type.id)}
-            className={`px-5 py-2.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+            onClick={() => handleFilterChange(type.id)}
+            className={`px-4 py-2 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
               filter === type.id
                 ? 'bg-[#0ea5e9] text-white shadow-md shadow-[#0ea5e9]/20'
                 : 'bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -184,14 +210,14 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredActivities.map((activity) => (
+          {currentActivities.map((activity) => (
             <div 
               key={activity.id} 
               onClick={() => setSelectedActivity(activity)}
-              className="bg-background border border-border/80 rounded-2xl p-5 sm:p-6 transition-all hover:border-[#0ea5e9]/70 hover:shadow-md cursor-pointer space-y-4 group"
+              className="bg-background border border-border/80 rounded-2xl p-4 sm:p-6 transition-all hover:border-[#0ea5e9]/70 hover:shadow-md cursor-pointer space-y-4 group"
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/60">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2.5 flex-wrap">
                   <span className="px-3 py-1 bg-[#0ea5e9]/10 text-[#0ea5e9] rounded-xl text-xs font-black">
                     {activity.typeLabel}
                   </span>
@@ -217,7 +243,7 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
                 </div>
               </div>
 
-              <div className="bg-muted/40 rounded-xl p-4 text-sm text-foreground/90 font-medium space-y-2">
+              <div className="bg-muted/40 rounded-xl p-3 sm:p-4 text-xs sm:text-sm text-foreground/90 font-medium space-y-2">
                 <p className="leading-relaxed line-clamp-2">
                   <strong className="text-muted-foreground ml-1">التفاصيل:</strong> 
                   {activity.message || activity.note || activity.details || activity.coverLetter || activity.eventTitle || activity.offerName || 'لا توجد تفاصيل إضافية مسجلة.'}
@@ -225,29 +251,78 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
               </div>
             </div>
           ))}
+
+          {/* نظام التنقل بين الصفحات (Pagination) متجاوب تماماً */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-6 border-t border-border/60 flex-wrap">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-4 py-2 rounded-xl bg-muted/60 hover:bg-muted text-foreground text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                السابق
+              </button>
+
+              {Array.from({ length: totalPages }, (_, index) => {
+                const pageNum = index + 1;
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`w-9 h-9 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      currentPage === pageNum
+                        ? 'bg-[#0ea5e9] text-white shadow-md shadow-[#0ea5e9]/20'
+                        : 'bg-muted/40 hover:bg-muted text-foreground'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 rounded-xl bg-muted/60 hover:bg-muted text-foreground text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                التالي
+              </button>
+            </div>
+          )}
         </div>
       )}
 
+      {/* نافذة التفاصيل (Modal) بستايل موحد ومتوافق مع وضع الدارك والوايت */}
       {selectedActivity && (
-        <div onClick={() => setSelectedActivity(null)} className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div onClick={(e) => e.stopPropagation()} className="bg-neutral-900 border border-neutral-700 text-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl relative space-y-5 max-h-[90vh] overflow-y-auto" dir="rtl">
-            <button onClick={() => setSelectedActivity(null)} className="absolute top-5 left-5 text-neutral-400 hover:text-white p-1.5 rounded-full bg-neutral-800 hover:bg-neutral-700 transition-colors cursor-pointer">
+        <div 
+          onClick={() => setSelectedActivity(null)} 
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()} 
+            className="bg-slate-900 border border-slate-800 text-white rounded-3xl p-6 sm:p-8 max-w-xl w-full shadow-2xl relative space-y-5 max-h-[90vh] overflow-y-auto" 
+            dir="rtl"
+          >
+            <button 
+              onClick={() => setSelectedActivity(null)} 
+              className="absolute top-5 left-5 text-slate-400 hover:text-white p-1.5 rounded-full bg-slate-800 hover:bg-slate-700 transition-colors cursor-pointer"
+            >
               <X size={18} />
             </button>
 
-            <div className="flex items-center gap-3 text-[#0ea5e9] font-black text-lg sm:text-xl border-b pb-4 border-neutral-800">
+            <div className="flex items-center gap-3 text-[#0ea5e9] font-black text-lg sm:text-xl border-b pb-4 border-slate-800">
               <FileText size={24} />
               <span>تفاصيل الطلب الكاملة</span>
             </div>
 
-            <div className="space-y-4 text-sm">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-neutral-800 p-4 rounded-2xl">
+            <div className="space-y-4 text-xs sm:text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800/80">
                 <div>
-                  <span className="text-neutral-400 text-xs block mb-1">نوع الطلب / القسم:</span>
+                  <span className="text-slate-400 text-xs block mb-1">نوع الطلب / القسم:</span>
                   <span className="font-bold text-white">{selectedActivity.typeLabel}</span>
                 </div>
                 <div>
-                  <span className="text-neutral-400 text-xs block mb-1">حالة الطلب:</span>
+                  <span className="text-slate-400 text-xs block mb-1">حالة الطلب:</span>
                   <span className={`inline-block px-3 py-1 rounded-xl text-xs font-bold ${
                     selectedActivity.status === 'completed' || selectedActivity.status === 'مكتمل' || selectedActivity.status === 'resolved' || selectedActivity.status === 'read'
                       ? 'bg-emerald-500/20 text-emerald-300' 
@@ -261,16 +336,16 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
               </div>
 
               {(selectedActivity.name || selectedActivity.fullName || selectedActivity.applicantName || selectedActivity.phone || selectedActivity.phoneNumber) && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-neutral-800 p-4 rounded-2xl">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-4 rounded-2xl border border-slate-800/80">
                   {selectedActivity.name || selectedActivity.fullName || selectedActivity.applicantName ? (
                     <div>
-                      <span className="text-neutral-400 text-xs block mb-1">الاسم المسجل:</span>
+                      <span className="text-slate-400 text-xs block mb-1">الاسم المسجل:</span>
                       <span className="font-bold text-white">{selectedActivity.name || selectedActivity.fullName || selectedActivity.applicantName}</span>
                     </div>
                   ) : null}
                   {selectedActivity.phone || selectedActivity.phoneNumber || selectedActivity.mobile ? (
                     <div>
-                      <span className="text-neutral-400 text-xs block mb-1">رقم الهاتف:</span>
+                      <span className="text-slate-400 text-xs block mb-1">رقم الهاتف:</span>
                       <span className="font-bold text-white" dir="ltr">{selectedActivity.phone || selectedActivity.phoneNumber || selectedActivity.mobile}</span>
                     </div>
                   ) : null}
@@ -278,8 +353,8 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
               )}
 
               {Object.keys(selectedActivity).some(key => !excludeFields.includes(key)) && (
-                <div className="bg-neutral-800/80 border border-neutral-700/60 p-4 rounded-2xl space-y-3">
-                  <span className="text-[#0ea5e9] text-xs block font-black border-b border-neutral-700 pb-2">الخيارات والحقول الإضافية المختارة:</span>
+                <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3">
+                  <span className="text-[#0ea5e9] text-xs block font-black border-b border-slate-800 pb-2">الخيارات والحقول الإضافية المختارة:</span>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {Object.entries(selectedActivity).map(([key, value]) => {
                       if (excludeFields.includes(key)) return null;
@@ -301,8 +376,8 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
                       if (!displayValue.trim()) return null;
 
                       return (
-                        <div key={key} className="bg-neutral-900/50 p-2.5 rounded-xl border border-neutral-800">
-                          <span className="text-neutral-400 text-[11px] block capitalize mb-0.5">{key}:</span>
+                        <div key={key} className="bg-slate-900 p-3 rounded-xl border border-slate-800">
+                          <span className="text-slate-400 text-[11px] block capitalize mb-0.5">{key}:</span>
                           <span className="font-bold text-white text-xs">{displayValue}</span>
                         </div>
                       );
@@ -311,21 +386,24 @@ export const ActivitiesList: React.FC<ActivitiesListProps> = ({ user }) => {
                 </div>
               )}
 
-              <div className="bg-neutral-800 p-4 rounded-2xl space-y-1">
-                <span className="text-neutral-400 text-xs block font-bold">التفاصيل الكاملة / الرسالة:</span>
-                <p className="text-white whitespace-pre-wrap leading-relaxed text-sm">
+              <div className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-1">
+                <span className="text-slate-400 text-xs block font-bold mb-1">التفاصيل الكاملة / الرسالة:</span>
+                <p className="text-white whitespace-pre-wrap leading-relaxed text-xs sm:text-sm">
                   {selectedActivity.message || selectedActivity.note || selectedActivity.details || selectedActivity.coverLetter || selectedActivity.eventTitle || selectedActivity.offerName || 'لا توجد تفاصيل إضافية مسجلة.'}
                 </p>
               </div>
 
-              <div className="text-xs text-neutral-400 pt-2 text-left flex items-center justify-end gap-1">
+              <div className="text-xs text-slate-400 pt-2 text-left flex items-center justify-end gap-1">
                 <Calendar size={13} />
                 تاريخ الإنشاء: {new Intl.DateTimeFormat('ar-EG', { dateStyle: 'full', timeStyle: 'medium' }).format(selectedActivity.parsedDate)}
               </div>
             </div>
 
             <div className="flex justify-end pt-2">
-              <button onClick={() => setSelectedActivity(null)} className="px-6 py-2.5 rounded-xl text-xs font-bold bg-[#0ea5e9] hover:bg-[#0ea5e9]/90 text-white transition-all cursor-pointer">
+              <button 
+                onClick={() => setSelectedActivity(null)} 
+                className="px-6 py-2.5 rounded-xl text-xs font-bold bg-[#0ea5e9] hover:bg-[#0ea5e9]/90 text-white transition-all cursor-pointer shadow-md shadow-[#0ea5e9]/20"
+              >
                 إغلاق
               </button>
             </div>
