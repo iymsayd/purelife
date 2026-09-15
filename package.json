@@ -4,10 +4,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "npx @opennextjs/cloudflare build",
     "start": "next start",
     "lint": "eslint",
-"pages:build": "npx @opennextjs/cloudflare build"
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "@google/genai": "^2.21.0",
