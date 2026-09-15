@@ -2,13 +2,15 @@
   "name": "purelife",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
+ "scripts": {
     "dev": "next dev",
-    "build": "npx @opennextjs/cloudflare build",
+    "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "pages:build": "npx @opennextjs/cloudflare build",
     "deploy": "wrangler deploy"
   },
+  
   "dependencies": {
     "@google/genai": "^2.21.0",
     "@opennextjs/cloudflare": "^1.20.6",
