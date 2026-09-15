@@ -7,8 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "pages:build": "npx @opennextjs/cloudflare build",
-    "deploy": "npx wrangler deploy"
+    "pages:build": "npx @opennextjs/cloudflare build && npx wrangler pages deploy .open-next/assets"
   },
   "dependencies": {
     "@google/genai": "^2.21.0",
