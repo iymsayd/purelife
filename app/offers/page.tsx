@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import Link from 'next/link';
 import { Tag, Sparkles, ArrowUpRight, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getOffers } from './offerService';

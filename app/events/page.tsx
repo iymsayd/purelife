@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import Link from 'next/link';
 import { CalendarDays, ArrowUpRight, MapPin, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getEvents } from './eventService';
