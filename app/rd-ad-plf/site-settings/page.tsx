@@ -24,7 +24,7 @@ export default function AdminSettingsPage() {
   
   // إعدادات الموقع واللوجو والفوتر (ضمان عدم وجود قيم undefined أبداً لتحويل الـ inputs إلى controlled بالكامل)
   const [settings, setSettings] = useState({
-    logoUrl: 'http://purelife-egy.com/Images/pure-logo.jpeg',
+    logoUrl: '/Images/pure-logo.jpeg',
     footerTitle: 'بيورلايف لحياة أفضل',
     footerDescription: 'وكلاء معتمدون لجميع أجهزة التكييف<br />خبراء متخصصون في معالجة وتحلية المياة<br />موزعون لقطع غيار التكييفات وفلاتر المياة<br />مقايسات فنية وتركيبات وتجهيزات وصيانة لجميع أعمال التكييف والتبريد',
     footerEmail: 'purelife2024a@gmail.com',

@@ -1,4 +1,3 @@
-export const runtime = 'edge';
 import Link from 'next/link';
 import { BookOpen, ArrowUpRight, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getBlogs } from '@/app/blog/blogService';

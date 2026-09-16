@@ -1,4 +1,3 @@
-export const runtime = 'edge';
 import Link from 'next/link';
 import { CalendarDays, ArrowUpRight, MapPin, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getEvents } from './eventService';
@@ -53,14 +52,14 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
   const currentPage = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
   const pageSize = 10;
 
-  let events = [];
-  try {
-    const res = await getEvents();
-    events = Array.isArray(res) ? res : [];
-  } catch (error) {
-    console.error("Failed to fetch events:", error);
-    events = [];
-  }
+    let events = [];
+    try {
+      const res = await getEvents();
+      events = Array.isArray(res) ? res : [];
+    } catch (error) {
+      console.error("Failed to fetch events:", error);
+      events = [];
+    }
 
   const totalEvents = events.length;
   const totalPages = Math.ceil(totalEvents / pageSize);

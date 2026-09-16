@@ -1,4 +1,3 @@
-export const runtime = 'edge';
 import { Groq } from "groq-sdk";
 import { NextResponse } from "next/server";
 

@@ -14,7 +14,7 @@ export default function Header() {
   const [displayName, setDisplayName] = useState<string>('');
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
-  const [logoUrl, setLogoUrl] = useState<string>("http://purelife-egy.com/Images/pure-logo.jpeg");
+  const [logoUrl, setLogoUrl] = useState<string>("/Images/pure-logo.jpeg");
     
   const dropdownRef = useRef<HTMLLIElement>(null);
   const logoutModalRef = useRef<HTMLDivElement>(null);

@@ -1,4 +1,3 @@
-export const runtime = 'edge';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, getDocs, query, where, limit } from 'firebase/firestore';
 import ProductDetailsClient from '@/app/used-products/[slug]/ProductDetailsClient';
