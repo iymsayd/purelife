@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db } from '@/lib/firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
-import { Plus, Trash2, Edit3, Image as ImageIcon, Link as LinkIcon, Upload, Loader2, BookOpen, Tag, CheckCircle, CalendarDays, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Plus, Trash2, Edit3, Image as ImageIcon, Upload, Loader2, BookOpen, Tag, CheckCircle, CalendarDays, ChevronRight, ChevronLeft, ArrowUpDown } from 'lucide-react';
 
 export default function ContentManager() {
   const [activeTab, setActiveTab] = useState<'blogs' | 'offers' | 'events'>('blogs');
@@ -12,12 +12,12 @@ export default function ContentManager() {
   const [success, setSuccess] = useState(false);
   
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [imageInputType, setImageInputType] = useState<'url' | 'file'>('url');
   const [uploadingImg, setUploadingImg] = useState(false);
 
-  // نظام التصفح (Pagination)
+  // نظام التصفح (Pagination) والترتيب
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 5; 
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
 
   // نظام التنبيهات المخصص
   const [alertModal, setAlertModal] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
@@ -38,14 +38,16 @@ export default function ContentManager() {
     discount: '',
     date: '',
     location: '',
-    image: ''
+    image: '',
+    imageAlt: ''
   });
 
   useEffect(() => {
     fetchData();
-    setCurrentPage(1); // إعادة التعيين للصفحة الأولى عند تبديل الأقسام
+    setCurrentPage(1); 
   }, [activeTab]);
 
+  // حماية ضد مشاكل الميموري بإزالة الـ EventListener عند الخروج
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -64,7 +66,7 @@ export default function ContentManager() {
       if (activeTab === 'offers') colName = 'offers';
       if (activeTab === 'events') colName = 'events';
 
-      const q = query(collection(db, colName), orderBy('createdAt', 'desc'));
+      const q = query(collection(db, colName), orderBy('createdAt', sortOrder));
       const snapshot = await getDocs(q);
       const list = snapshot.docs.map(docSnap => ({
         id: docSnap.id,
@@ -78,7 +80,10 @@ export default function ContentManager() {
     }
   };
 
-  // حساب العناصر الحالية للصفحة النشطة
+  useEffect(() => {
+    fetchData();
+  }, [sortOrder]);
+
   const paginatedItems = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return items.slice(start, start + itemsPerPage);
@@ -113,24 +118,32 @@ export default function ContentManager() {
       setAlertModal({ show: true, message: "الرجاء إدخال عنوان العنصر." });
       return;
     }
+    if (!formData.slug.trim()) {
+      setAlertModal({ show: true, message: "الرجاء إدخال الرابط المخصص (Slug)." });
+      return;
+    }
     if (!formData.image.trim()) {
-      setAlertModal({ show: true, message: "الرجاء إدخال أو رفع صورة الغلاف." });
+      setAlertModal({ show: true, message: "الرجاء رفع صورة الغلاف من الجهاز." });
+      return;
+    }
+    if (!formData.imageAlt.trim()) {
+      setAlertModal({ show: true, message: "الرجاء إدخال النص البديل للصورة (Image Alt)." });
       return;
     }
 
     if (activeTab === 'blogs') {
       if (!formData.category.trim() || !formData.summary.trim() || !formData.content.trim()) {
-        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول المقال الإجبارية." });
+        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول المقال المطلوبة." });
         return;
       }
     } else if (activeTab === 'offers') {
       if (!formData.discount.trim() || !formData.desc.trim()) {
-        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول العرض الإجبارية." });
+        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول العرض المطلوبة." });
         return;
       }
     } else if (activeTab === 'events') {
       if (!formData.date.trim() || !formData.location.trim() || !formData.desc.trim()) {
-        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول الحدث الإجبارية." });
+        setAlertModal({ show: true, message: "الرجاء استكمال جميع حقول الحدث المطلوبة." });
         return;
       }
     }
@@ -143,11 +156,8 @@ export default function ContentManager() {
       if (activeTab === 'offers') colName = 'offers';
       if (activeTab === 'events') colName = 'events';
 
-      const slugValue = formData.slug.trim() || formData.title.trim().replace(/\s+/g, '-').toLowerCase();
-
       const payload: any = {
         ...formData,
-        slug: slugValue,
         createdAt: editingId ? undefined : Date.now()
       };
 
@@ -200,7 +210,8 @@ export default function ContentManager() {
       discount: item.discount || '',
       date: item.date || '',
       location: item.location || '',
-      image: item.image || ''
+      image: item.image || '',
+      imageAlt: item.imageAlt || ''
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -239,7 +250,8 @@ export default function ContentManager() {
       discount: '',
       date: '',
       location: '',
-      image: ''
+      image: '',
+      imageAlt: ''
     });
   };
 
@@ -301,17 +313,26 @@ export default function ContentManager() {
             <label className="block text-xs font-bold mb-2">العنوان *</label>
             <input 
               type="text" 
+              required
               value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+              onChange={(e) => {
+                const titleVal = e.target.value;
+                setFormData(prev => ({
+                  ...prev,
+                  title: titleVal,
+                  slug: editingId ? prev.slug : titleVal.trim().replace(/\s+/g, '-').toLowerCase()
+                }))
+              }}
               placeholder="اكتب العنوان هنا..."
               className="w-full p-3.5 rounded-2xl border border-border bg-background text-foreground text-sm outline-none focus:border-[var(--secondary)] transition-all"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-bold mb-2">الرابط المخصص (Slug) - اختياري</label>
+            <label className="block text-xs font-bold mb-2">الرابط المخصص Slug *</label>
             <input 
               type="text" 
+              required
               value={formData.slug}
               onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
               placeholder="url-slug-example"
@@ -323,13 +344,14 @@ export default function ContentManager() {
             <div>
               <label className="block text-xs font-bold mb-2">التصنيف *</label>
               <select 
+                required
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                 className="w-full p-3.5 rounded-2xl border border-border bg-background text-foreground text-sm outline-none focus:border-[var(--secondary)] transition-all cursor-pointer"
               >
-                <option value="فلاتر">فلاتر</option>
-                <option value="تكييفات">تكييفات</option>
-                <option value="عام">عام</option>
+                <option value="فلاتر" className="bg-background text-black">فلاتر</option>
+                <option value="تكييفات" className="bg-background text-black">تكييفات</option>
+                <option value="عام" className="bg-background text-black">عام</option>
               </select>
             </div>
           )}
@@ -339,6 +361,7 @@ export default function ContentManager() {
               <label className="block text-xs font-bold mb-2">قيمة الخصم *</label>
               <input 
                 type="text" 
+                required
                 value={formData.discount}
                 onChange={(e) => setFormData({ ...formData, discount: e.target.value })}
                 placeholder="خصم 20%"
@@ -353,6 +376,7 @@ export default function ContentManager() {
                 <label className="block text-xs font-bold mb-2">تاريخ الحدث *</label>
                 <input 
                   type="text" 
+                  required
                   value={formData.date}
                   onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                   placeholder="15 يونيو 2026"
@@ -363,6 +387,7 @@ export default function ContentManager() {
                 <label className="block text-xs font-bold mb-2">مكان الحدث *</label>
                 <input 
                   type="text" 
+                  required
                   value={formData.location}
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                   placeholder="القاهرة، شارع الهرم"
@@ -372,54 +397,39 @@ export default function ContentManager() {
             </>
           )}
 
-          <div className="md:col-span-2">
-            <div className="flex justify-between items-center mb-2">
-              <label className="block text-xs font-bold">صورة الغلاف *</label>
-              <div className="flex gap-2 text-xs">
-                <button 
-                  type="button" 
-                  onClick={() => setImageInputType('url')}
-                  className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${imageInputType === 'url' ? 'bg-[var(--secondary)] text-white' : 'bg-muted/50 text-muted-foreground'}`}
-                >
-                  رابط URL
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => setImageInputType('file')}
-                  className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${imageInputType === 'file' ? 'bg-[var(--secondary)] text-white' : 'bg-muted/50 text-muted-foreground'}`}
-                >
-                  رفع ملف
-                </button>
-              </div>
-            </div>
-
-            {imageInputType === 'url' ? (
-              <input 
-                type="url" 
-                value={formData.image}
-                onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                placeholder="https://example.com/image.jpg"
-                className="w-full p-3.5 rounded-2xl border border-border bg-background text-foreground text-sm outline-none focus:border-[var(--secondary)] transition-all"
-              />
-            ) : (
+          <div className="md:col-span-2 space-y-4">
+            <div>
+              <label className="block text-xs font-bold mb-2">صورة الغلاف من الجهاز *</label>
               <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-border rounded-2xl cursor-pointer hover:border-[var(--secondary)] transition-all bg-background">
                 {uploadingImg ? (
                   <Loader2 className="animate-spin text-[var(--secondary)]" size={24} />
                 ) : (
                   <>
                     <Upload size={24} className="text-muted-foreground mb-2" />
-                    <span className="text-xs font-bold text-muted-foreground">اختر صورة من جهازك (أقل من 2 ميجابايت)</span>
+                    <span className="text-xs font-bold text-muted-foreground">اضغط لاختيار صورة من جهازك (أقل من 2 ميجابايت)</span>
                   </>
                 )}
                 <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
               </label>
-            )}
 
-            {formData.image && (
-              <div className="mt-3 w-32 h-20 rounded-xl overflow-hidden border border-border relative">
-                <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
-              </div>
-            )}
+              {formData.image && (
+                <div className="mt-3 w-32 h-20 rounded-xl overflow-hidden border border-border relative inline-block">
+                  <img src={formData.image} alt={formData.imageAlt || "Preview"} className="w-full h-full object-cover" />
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold mb-2">النص البديل للصورة Alt *</label>
+              <input 
+                type="text" 
+                required
+                value={formData.imageAlt}
+                onChange={(e) => setFormData({ ...formData, imageAlt: e.target.value })}
+                placeholder="صف شكل ووصف الصورة باختصار..."
+                className="w-full p-3.5 rounded-2xl border border-border bg-background text-foreground text-sm outline-none focus:border-[var(--secondary)] transition-all"
+              />
+            </div>
           </div>
 
           {(activeTab === 'offers' || activeTab === 'events') && (
@@ -427,6 +437,7 @@ export default function ContentManager() {
               <label className="block text-xs font-bold mb-2">وصف مختصر *</label>
               <textarea 
                 rows={3}
+                required
                 value={formData.desc}
                 onChange={(e) => setFormData({ ...formData, desc: e.target.value })}
                 placeholder="اكتب وصفاً مختصراً..."
@@ -441,6 +452,7 @@ export default function ContentManager() {
                 <label className="block text-xs font-bold mb-2">الملخص *</label>
                 <textarea 
                   rows={3}
+                  required
                   value={formData.summary}
                   onChange={(e) => setFormData({ ...formData, summary: e.target.value })}
                   placeholder="ملخص قصير للمقال..."
@@ -452,6 +464,7 @@ export default function ContentManager() {
                 <label className="block text-xs font-bold mb-2">محتوى المقال الكامل *</label>
                 <textarea 
                   rows={6}
+                  required
                   value={formData.content}
                   onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                   placeholder="اكتب محتوى المقال هنا..."
@@ -474,11 +487,26 @@ export default function ContentManager() {
         </div>
       </form>
 
-      {/* قائمة العناصر الحالية مع نظام الـ Pagination (10 لكل صفحة) */}
+      {/* قائمة العناصر الحالية */}
       <div className="border border-border rounded-3xl shadow-sm p-6 md:p-8 bg-card text-card-foreground">
-        <h3 className="text-base sm:text-lg font-bold mb-6">
-          قائمة {activeTab === 'blogs' ? 'المقالات' : activeTab === 'offers' ? 'العروض' : 'الفعاليات'} الحالية ({items.length})
-        </h3>
+        
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+          <h3 className="text-base sm:text-lg font-bold">
+            قائمة {activeTab === 'blogs' ? 'المقالات' : activeTab === 'offers' ? 'العروض' : 'الفعاليات'} الحالية ({items.length})
+          </h3>
+
+          <div className="flex items-center gap-2">
+            <ArrowUpDown size={16} className="text-muted-foreground" />
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as 'desc' | 'asc')}
+              className="p-2.5 rounded-xl border border-border bg-background text-foreground text-xs font-bold outline-none cursor-pointer"
+            >
+              <option value="desc" className="bg-black text-white">من الأحدث إلى الأقدم</option>
+              <option value="asc" className="bg-black text-white">من الأقدم إلى الأحدث</option>
+            </select>
+          </div>
+        </div>
 
         {loading ? (
           <div className="flex justify-center py-12">
@@ -493,7 +521,7 @@ export default function ContentManager() {
                 <div key={item.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl border border-border bg-muted/20 gap-4 transition-all hover:bg-muted/40">
                   <div className="flex items-center gap-4 w-full sm:w-auto">
                     {item.image ? (
-                      <img src={item.image} alt={item.title} className="w-16 h-16 rounded-xl object-cover shrink-0 border border-border" />
+                      <img src={item.image} alt={item.imageAlt || item.title} className="w-16 h-16 rounded-xl object-cover shrink-0 border border-border" />
                     ) : (
                       <div className="w-16 h-16 rounded-xl bg-muted flex items-center justify-center shrink-0 border border-border">
                         <ImageIcon size={24} className="text-muted-foreground" />
@@ -525,7 +553,6 @@ export default function ContentManager() {
               ))}
             </div>
 
-            {/* أزرار التنقل بين الصفحات (Pagination Controls) */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between mt-8 pt-4 border-t border-border">
                 <button

@@ -1,10 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useCart } from '../../context/CartContext';
 
 const dict = {
   description: "وصف المنتج:",
   addToCart: "اضافة للسلة",
+  outOfStock: "غير متاح حالياً",
   added: "تمت الإضافة بنجاح! ✅",
   addedCartCheck: "تمت الإضافة للسلة بنجاح ✓",
   quantity: "الكمية:",
@@ -35,6 +37,7 @@ interface Product {
   sterilization?: string;
   price?: number | string;
   image?: string;
+  stock?: number;
   createdAt?: string | null;
   [key: string]: any;
 }
@@ -54,6 +57,11 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
 
   const displayTitle = product.nameAr || product.titleAr || product.title || product.name || '';
   const displayDesc = product.descriptionAr || product.descAr || product.description || '';
+  const imageAlt = displayTitle || product.name || product.title || "صورة المنتج";
+  
+  // التحقق من المخزون (لو مش موجود بيتاخد افتراضي 99)
+  const currentStock = typeof product.stock === 'number' ? product.stock : 99;
+  const isOutOfStock = currentStock <= 0;
   
   const getProductDetails = () => {
     const category = product.category || "";
@@ -73,7 +81,6 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
         { label: "بلد المنشأ:", value: product.origin }
       ];
     } else {
-      // الافتراضي للفلاتر
       return [
         { label: "الفئة:", value: "فلاتر" },
         { label: "الماركة:", value: product.brand },
@@ -98,13 +105,30 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
     <main className="max-w-4xl mx-auto" dir="rtl">
       <div className="grid md:grid-cols-2 gap-8 lg:gap-12 bg-[var(--background)] text-[var(--foreground)] p-6 md:p-8 rounded-[2.5rem] border border-[var(--border)] shadow-md">
         
-        <div className="h-72 md:h-80 bg-[var(--background)] rounded-3xl flex items-center justify-center overflow-hidden border border-[var(--border)]">
-          {product.image ? <img src={product.image} alt={displayTitle} className="w-full h-full object-cover" /> : <span className="text-8xl">📦</span>}
+        <div className="h-72 md:h-80 bg-[var(--background)] rounded-3xl flex items-center justify-center overflow-hidden border border-[var(--border)] relative">
+          {product.image ? (
+            <Image 
+              src={product.image} 
+              alt={imageAlt} 
+              fill 
+              sizes="(max-width: 768px) 100vw, 50vw" 
+              className="object-cover" 
+              priority 
+            />
+          ) : (
+            <span className="text-8xl">📦</span>
+          )}
         </div>
         
         <div className="space-y-5 flex flex-col justify-between">
           <div className="space-y-4">
-            <span className="inline-block bg-[var(--secondary)]/10 text-[var(--secondary)] text-xs px-3 py-1 rounded-full font-black">منتج جديد</span>
+            <div className="flex items-center gap-2">
+              <span className="inline-block bg-[var(--secondary)]/10 text-[var(--secondary)] text-xs px-3 py-1 rounded-full font-black">منتج جديد</span>
+              {isOutOfStock && (
+                <span className="inline-block bg-red-500/10 text-red-600 text-xs px-3 py-1 rounded-full font-black">غير متاح حالياً</span>
+              )}
+            </div>
+            
             <h1 className="text-2xl md:text-3xl font-black text-[var(--secondary)]">{displayTitle}</h1>
             <p className="text-2xl font-black">{product.price ? `${product.price} ج.م` : dict.callForPrice}</p>
             
@@ -122,10 +146,18 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
             )}
           </div>
 
-          {!isAdded ? (
+          {isOutOfStock ? (
+            <button 
+              disabled
+              className="w-full bg-gray-300 dark:bg-zinc-800 text-gray-500 dark:text-zinc-500 py-4 rounded-2xl font-black cursor-not-allowed"
+              type="button"
+            >
+              {dict.outOfStock}
+            </button>
+          ) : !isAdded ? (
             <button 
               onClick={() => { 
-                addToCart({ ...product, type: 'new' }); 
+                addToCart({ ...product, type: 'new', stock: currentStock }); 
                 setShowAdded(true); 
                 setTimeout(() => setShowAdded(false), 1500);
               }} 
@@ -142,7 +174,15 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
                 <div className="flex items-center gap-3">
                   <button onClick={() => decreaseQuantity(product.id, 'new')} className="w-8 h-8 rounded-xl bg-[var(--border)] font-bold cursor-pointer flex items-center justify-center text-[var(--secondary)]" type="button">-</button>
                   <span className="font-black w-6 text-center">{cartItemCount}</span>
-                  <button onClick={() => increaseQuantity(product.id, 'new')} className="w-8 h-8 rounded-xl bg-[var(--border)] font-bold cursor-pointer flex items-center justify-center text-[var(--secondary)]" type="button">+</button>
+                  <button 
+                    onClick={() => {
+                      if (cartItemCount < currentStock) {
+                        increaseQuantity(product.id, 'new');
+                      }
+                    }} 
+                    className={`w-8 h-8 rounded-xl bg-[var(--border)] font-bold flex items-center justify-center text-[var(--secondary)] ${cartItemCount >= currentStock ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`} 
+                    type="button"
+                  >+</button>
                 </div>
               </div>
               <button onClick={() => removeFromCart(product.id, 'new')} className="w-full text-red-600 border border-red-500/30 py-3 rounded-2xl font-bold cursor-pointer hover:bg-red-500/10 transition-all text-sm" type="button">{dict.remove}</button>

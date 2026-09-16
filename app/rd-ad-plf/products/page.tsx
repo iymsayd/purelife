@@ -7,11 +7,16 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<'products' | 'used_products'>('products');
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // حالة فلترة القسم داخل الجدول (قائمة منسدلة) و الـ Sort والصفحات
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // حالات النموذج (إضافة / تعديل)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [imageInputType, setImageInputType] = useState<'url' | 'file'>('url');
   
   // نظام التنبيهات والتأكيدات المخصصة
   const [alertModal, setAlertModal] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
@@ -22,11 +27,13 @@ export default function DashboardPage() {
     onConfirm: () => {},
   });
 
-  // حقول المنتج الشاملة (جميعها نصوص لضمان خلوها تاماً من الـ undefined)
+  // حقول المنتج الشاملة (مع إضافة المخزون stock وخانة alt الإجبارية)
   const [formData, setFormData] = useState({
     title: '',
     price: '',
+    stock: '1',
     image: '',
+    imageAlt: '',
     brand: '',
     category: 'فلاتر',
     stages: '',
@@ -46,7 +53,19 @@ export default function DashboardPage() {
     try {
       const collectionName = activeTab === 'products' ? 'products' : 'used_products';
       const querySnapshot = await getDocs(collection(db, collectionName));
-      const list = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const list = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data();
+        return {
+          id: docSnap.id,
+          ...data,
+          title: data.title || data.nameAr || '',
+          category: data.category || data.categoryAr || 'فلاتر',
+          condition: data.condition || data.conditionAr || (activeTab === 'used_products' ? 'مستعمل' : ''),
+          stock: data.stock !== undefined && data.stock !== null ? Number(data.stock) : 1,
+          imageAlt: data.imageAlt || data.alt || data.title || data.nameAr || 'صورة المنتج',
+          createdAtTime: data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now()),
+        };
+      });
       setItems(list);
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -56,6 +75,8 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
+    setSelectedCategoryFilter('all');
+    setCurrentPage(1);
     fetchData();
   }, [activeTab]);
 
@@ -75,11 +96,12 @@ export default function DashboardPage() {
   // فتح نافذة الإضافة
   const handleOpenAdd = () => {
     setEditingId(null);
-    setImageInputType('url');
     setFormData({
       title: '',
       price: '',
+      stock: '10',
       image: '',
+      imageAlt: '',
       brand: '',
       category: 'فلاتر',
       stages: '',
@@ -99,14 +121,14 @@ export default function DashboardPage() {
   const handleOpenEdit = (item: any) => {
     setEditingId(item.id);
     const imageUrl = item.image || item.imageUrl || '';
-    const isFileImage = imageUrl && imageUrl.startsWith('data:');
-    setImageInputType(isFileImage ? 'file' : 'url');
     setFormData({
-      title: item.nameAr || item.title || '',
+      title: item.title || item.nameAr || '',
       price: item.price !== undefined && item.price !== null ? String(item.price) : '',
+      stock: item.stock !== undefined && item.stock !== null ? String(item.stock) : '1',
       image: imageUrl,
+      imageAlt: item.imageAlt || item.alt || item.title || '',
       brand: item.brand || '',
-      category: item.category || item.categoryAr || 'فلاتر',
+      category: item.category || 'فلاتر',
       stages: item.stages || '',
       power: item.power || '',
       sterilization: item.sterilization || '',
@@ -114,8 +136,8 @@ export default function DashboardPage() {
       origin: item.origin || '',
       cooling: item.cooling || '',
       deviceType: item.deviceType || '',
-      condition: item.condition || item.conditionAr || '',
-      description: item.description || item.descriptionAr || item.desc || '',
+      condition: item.condition || '',
+      description: item.description || item.desc || '',
     });
     setIsModalOpen(true);
   };
@@ -126,7 +148,7 @@ export default function DashboardPage() {
     setEditingId(null);
   };
 
-  // تحويل الصورة المرفوعة إلى Base64
+  // تحويل الصورة المرفوعة من الجهاز إلى Base64
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -138,12 +160,18 @@ export default function DashboardPage() {
     }
   };
 
-  // حفظ المنتج (إضافة أو تعديل) مع تحديث التاريخ حتى عند التعديل
+  // حفظ المنتج (إضافة أو تعديل) مع فحص المخزون والـ Alt
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.title.trim() || !formData.price || !formData.image.trim() || !formData.description.trim()) {
-      setAlertModal({ show: true, message: "الرجاء استكمال الحقول الأساسية الإجبارية (عنوان المنتج، السعر، الصورة، ووصف المنتج) قبل الحفظ." });
+    const stockNumber = Number(formData.stock);
+    if (stockNumber <= 0 || isNaN(stockNumber)) {
+      setAlertModal({ show: true, message: "عذراً، لا يمكن إضافة أو حفظ منتج مخزونه 0 أو فارغ. يجب تحديد كمية مخزون صحيحة." });
+      return;
+    }
+
+    if (!formData.title.trim() || !formData.price || !formData.image.trim() || !formData.imageAlt.trim() || !formData.description.trim()) {
+      setAlertModal({ show: true, message: "الرجاء استكمال الحقول الأساسية الإجبارية (عنوان المنتج، السعر، رفع صورة من الجهاز، الوصف، والنص البديل للصورة Alt)." });
       return;
     }
 
@@ -175,15 +203,18 @@ export default function DashboardPage() {
 
     const collectionName = activeTab === 'products' ? 'products' : 'used_products';
 
-    // حفظ الصورة في المفتاحين (image و imageUrl) لضمان توافقها التام مع الواجهة الرئيسية
     const payload: any = {
       title: formData.title.trim(),
       nameAr: formData.title.trim(),
       price: Number(formData.price),
+      stock: stockNumber,
       image: formData.image.trim(),
       imageUrl: formData.image.trim(),
+      imageAlt: formData.imageAlt.trim(),
+      alt: formData.imageAlt.trim(),
       brand: isSpareParts ? '' : formData.brand.trim(),
       category: formData.category,
+      categoryAr: formData.category,
       stages: formData.stages.trim(),
       power: formData.power.trim(),
       sterilization: formData.sterilization.trim(),
@@ -192,7 +223,7 @@ export default function DashboardPage() {
       cooling: formData.cooling.trim(),
       deviceType: formData.deviceType.trim(),
       description: formData.description.trim(),
-      createdAt: serverTimestamp(), // يتم تحديثه أو إضافته دائماً عند الحفظ
+      updatedAt: serverTimestamp(),
     };
 
     if (activeTab === 'used_products') {
@@ -207,6 +238,7 @@ export default function DashboardPage() {
         const docRef = doc(db, collectionName, editingId);
         await updateDoc(docRef, payload);
       } else {
+        payload.createdAt = serverTimestamp();
         await addDoc(collection(db, collectionName), payload);
       }
       setIsModalOpen(false);
@@ -238,6 +270,32 @@ export default function DashboardPage() {
     });
   };
 
+  // تصفية العناصر وترتيبها حسب الأحدث/الأقدم
+  const filteredAndSortedItems = items
+    .filter(item => {
+      if (selectedCategoryFilter === 'all') return true;
+      return item.category === selectedCategoryFilter;
+    })
+    .sort((a, b) => {
+      if (sortOrder === 'newest') {
+        return b.createdAtTime - a.createdAtTime;
+      } else {
+        return a.createdAtTime - b.createdAtTime;
+      }
+    });
+
+  // حساب الصفحات (Pagination - 10 عناصر لكل صفحة)
+  const totalPages = Math.ceil(filteredAndSortedItems.length / itemsPerPage) || 1;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const currentItems = filteredAndSortedItems.slice(startIndex, startIndex + itemsPerPage);
+
+  // تغيير الصفحة والانتقال
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
+    }
+  };
+
   return (
     <main className="max-w-6xl mx-auto p-4 md:p-8" dir="rtl">
       {/* رأس الموضوع */}
@@ -257,38 +315,72 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* التبويبات */}
-      <div className="flex gap-3 mb-6">
-        <button
-          onClick={() => setActiveTab('products')}
-          className={`px-6 py-3 rounded-2xl font-black text-sm transition cursor-pointer border ${
-            activeTab === 'products'
-              ? 'bg-[var(--secondary)] text-white border-[var(--secondary)] shadow-md'
-              : 'bg-[var(--background)] text-[var(--foreground)] border-[var(--border)] hover:bg-[var(--secondary)]/10'
-          }`}
-          type="button"
-        >
-          📦 المنتجات الجديدة
-        </button>
-        <button
-          onClick={() => setActiveTab('used_products')}
-          className={`px-6 py-3 rounded-2xl font-black text-sm transition cursor-pointer border ${
-            activeTab === 'used_products'
-              ? 'bg-[var(--secondary)] text-white border-[var(--secondary)] shadow-md'
-              : 'bg-[var(--background)] text-[var(--foreground)] border-[var(--border)] hover:bg-[var(--secondary)]/10'
-          }`}
-          type="button"
-        >
-          🔄 المنتجات المستعملة
-        </button>
+      {/* التبويبات الرئيسية وأدوات التحكم (فلتر الأقسام + الترتيب) */}
+      <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 mb-6">
+        <div className="flex gap-3 overflow-x-auto pb-2 lg:pb-0">
+          <button
+            onClick={() => { setActiveTab('products'); setCurrentPage(1); }}
+            className={`px-6 py-3 rounded-2xl font-black text-sm transition cursor-pointer border whitespace-nowrap ${
+              activeTab === 'products'
+                ? 'bg-[var(--secondary)] text-white border-[var(--secondary)] shadow-md'
+                : 'bg-[var(--background)] text-[var(--foreground)] border-[var(--border)] hover:bg-[var(--secondary)]/10'
+            }`}
+            type="button"
+          >
+            📦 المنتجات الجديدة
+          </button>
+          <button
+            onClick={() => { setActiveTab('used_products'); setCurrentPage(1); }}
+            className={`px-6 py-3 rounded-2xl font-black text-sm transition cursor-pointer border whitespace-nowrap ${
+              activeTab === 'used_products'
+                ? 'bg-[var(--secondary)] text-white border-[var(--secondary)] shadow-md'
+                : 'bg-[var(--background)] text-[var(--foreground)] border-[var(--border)] hover:bg-[var(--secondary)]/10'
+            }`}
+            type="button"
+          >
+            🔄 المنتجات المستعملة
+          </button>
+        </div>
+
+        {/* فلاتر الأقسام (Select Dropdown) والترتيب */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          {/* فلتر القسم كـ Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-[var(--muted-foreground)] whitespace-nowrap">القسم:</span>
+            <select
+              value={selectedCategoryFilter}
+              onChange={(e) => { setSelectedCategoryFilter(e.target.value); setCurrentPage(1); }}
+              className="bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-[var(--secondary)] cursor-pointer w-full sm:w-auto"
+            >
+              <option value="all">كل الأقسام</option>
+              <option value="فلاتر">فلاتر</option>
+              <option value="تكييفات">تكييفات</option>
+              <option value="قطع غيار فلاتر">قطع غيار فلاتر</option>
+              <option value="قطع غيار تكييفات">قطع غيار تكييفات</option>
+            </select>
+          </div>
+
+          {/* الترتيب (الأحدث / الأقدم) */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-[var(--muted-foreground)] whitespace-nowrap">الترتيب:</span>
+            <select
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as 'newest' | 'oldest')}
+              className="bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-[var(--secondary)] cursor-pointer w-full sm:w-auto"
+            >
+              <option value="newest">من الأحدث للأقدم ⬇️</option>
+              <option value="oldest">من الأقدم للأحدث ⬆️</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* جدول عرض المنتجات */}
       <div className="bg-[var(--background)] border border-[var(--border)] rounded-[2.5rem] shadow-md overflow-hidden">
         {loading ? (
           <div className="p-12 text-center text-[var(--muted-foreground)] font-bold animate-pulse">جاري تحميل البيانات...</div>
-        ) : items.length === 0 ? (
-          <div className="p-12 text-center text-[var(--muted-foreground)] font-bold">لا توجد منتجات مضافة في هذا القسم حالياً.</div>
+        ) : currentItems.length === 0 ? (
+          <div className="p-12 text-center text-[var(--muted-foreground)] font-bold">لا توجد منتجات مطابقة في هذا الفلتر حالياً.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-right border-collapse">
@@ -298,28 +390,41 @@ export default function DashboardPage() {
                   <th className="p-4">اسم المنتج</th>
                   <th className="p-4">القسم</th>
                   <th className="p-4">السعر</th>
+                  <th className="p-4">المخزون</th>
                   <th className="p-4">الماركة</th>
                   {activeTab === 'used_products' && <th className="p-4">الحالة</th>}
                   <th className="p-4 text-center">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--border)] text-sm">
-                {items.map((item) => {
+                {currentItems.map((item) => {
                   const displayImg = item.image || item.imageUrl || '';
+                  const displayAlt = item.imageAlt || item.alt || item.title || 'صورة المنتج';
+                  const isOutOfStock = item.stock <= 0;
                   return (
                     <tr key={item.id} className="hover:bg-[var(--secondary)]/5 transition">
                       <td className="p-4">
-                        <div className="w-12 h-12 rounded-xl bg-[var(--card)] border border-[var(--border)] overflow-hidden flex items-center justify-center shrink-0">
+                        {/* استخدام حاوية بنظام relative ومتوافقة مع fill و alt */}
+                        <div className="relative w-12 h-12 rounded-xl bg-[var(--card)] border border-[var(--border)] overflow-hidden flex items-center justify-center shrink-0">
                           {displayImg ? (
-                            <img src={displayImg} alt="" className="w-full h-full object-cover" />
+                            <img 
+                              src={displayImg} 
+                              alt={displayAlt} 
+                              className="absolute inset-0 w-full h-full object-cover" 
+                            />
                           ) : (
                             <span>📦</span>
                           )}
                         </div>
                       </td>
-                      <td className="p-4 font-black text-[var(--foreground)]">{item.nameAr || item.title || ''}</td>
-                      <td className="p-4 text-[var(--muted-foreground)] whitespace-nowrap">{item.category || 'غير محدد'}</td>
+                      <td className="p-4 font-black text-[var(--foreground)]">{item.title}</td>
+                      <td className="p-4 text-[var(--muted-foreground)] whitespace-nowrap">{item.category}</td>
                       <td className="p-4 font-bold text-[var(--secondary)] whitespace-nowrap">{item.price !== undefined && item.price !== null && item.price !== '' ? `${item.price} ج.م` : 'اتصل للسعر'}</td>
+                      <td className="p-4 whitespace-nowrap">
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold inline-block ${isOutOfStock ? 'bg-red-500/10 text-red-600' : 'bg-emerald-500/10 text-emerald-600'}`}>
+                          {isOutOfStock ? 'خلصان (0)' : `${item.stock} قطعة`}
+                        </span>
+                      </td>
                       <td className="p-4 text-[var(--muted-foreground)]">{item.brand || 'غير متوفرة'}</td>
                       {activeTab === 'used_products' && (
                         <td className="p-4 whitespace-nowrap">
@@ -354,6 +459,33 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* شريط التنقل بين الصفحات (Pagination Controls) */}
+      {!loading && totalPages > 1 && (
+        <div className="flex justify-center items-center gap-2 mt-6">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--border)] text-xs font-bold text-[var(--foreground)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--secondary)]/10 transition cursor-pointer"
+            type="button"
+          >
+            السابق
+          </button>
+          
+          <div className="px-4 py-2 bg-[var(--card)] border border-[var(--border)] rounded-xl text-xs font-black text-[var(--foreground)]">
+            صفحة {currentPage} من {totalPages}
+          </div>
+
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="px-4 py-2 rounded-xl bg-[var(--background)] border border-[var(--border)] text-xs font-bold text-[var(--foreground)] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[var(--secondary)]/10 transition cursor-pointer"
+            type="button"
+          >
+            التالي
+          </button>
+        </div>
+      )}
 
       {/* نافذة الإضافة أو التعديل (Modal) */}
       {isModalOpen && (
@@ -404,47 +536,59 @@ export default function DashboardPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[var(--foreground)] mb-1">القسم الرئيسي *</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full bg-[var(--card)] border border-[var(--border)] rounded-2xl px-3 py-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[var(--secondary)] cursor-pointer"
-                  >
-                    <option value="فلاتر">الفلاتر</option>
-                    <option value="تكييفات">التكييفات</option>
-                    <option value="قطع غيار فلاتر">قطع غيار فلاتر</option>
-                    <option value="قطع غيار تكييفات">قطع غيار تكييفات</option>
-                  </select>
+                  <label className="block text-xs font-bold text-[var(--foreground)] mb-1">المخزون (الكمية) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={formData.stock}
+                    onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
+                    className="w-full bg-[var(--card)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[var(--secondary)]"
+                    placeholder="مثال: 15 (إذا كان 0 لن يتم الحفظ)"
+                  />
                 </div>
               </div>
 
-              {/* اختيار طريقة الصورة: رابط أو رفع ملف */}
               <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="text-xs font-bold text-[var(--foreground)]">صورة المنتج *</label>
-                  <div className="flex gap-2 text-xs">
-                    <button type="button" onClick={() => setImageInputType('url')} className={`px-2.5 py-1 rounded-lg font-bold ${imageInputType === 'url' ? 'bg-[var(--secondary)] text-white' : 'text-[var(--muted-foreground)] bg-[var(--card)] border border-[var(--border)]'}`}>رابط</button>
-                    <button type="button" onClick={() => setImageInputType('file')} className={`px-2.5 py-1 rounded-lg font-bold ${imageInputType === 'file' ? 'bg-[var(--secondary)] text-white' : 'text-[var(--muted-foreground)] bg-[var(--card)] border border-[var(--border)]'}`}>رفع ملف</button>
-                  </div>
-                </div>
-                {imageInputType === 'url' ? (
-                  <input
-                    type="url"
-                    required={imageInputType === 'url'}
-                    value={formData.image && formData.image.startsWith('data:') ? '' : formData.image}
-                    onChange={(e) => setFormData({ ...formData, image: e.target.value })}
-                    className="w-full bg-[var(--card)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[var(--secondary)]"
-                    placeholder="https://example.com/image.jpg"
-                  />
-                ) : (
-                  <input
-                    type="file"
-                    required={!formData.image}
-                    accept="image/*"
-                    onChange={handleImageFileChange}
-                    className="w-full bg-[var(--card)] border border-[var(--border)] rounded-2xl px-4 py-2.5 text-sm text-[var(--foreground)] file:ml-4 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[var(--secondary)] file:text-white cursor-pointer"
-                  />
+                <label className="block text-xs font-bold text-[var(--foreground)] mb-1">القسم الرئيسي *</label>
+                <select
+                  value={formData.category}
+                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                  className="w-full bg-[var(--card)] border border-[var(--border)] rounded-2xl px-3 py-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[var(--secondary)] cursor-pointer"
+                >
+                  <option value="فلاتر">الفلاتر</option>
+                  <option value="تكييفات">التكييفات</option>
+                  <option value="قطع غيار فلاتر">قطع غيار فلاتر</option>
+                  <option value="قطع غيار تكييفات">قطع غيار تكييفات</option>
+                </select>
+              </div>
+
+              {/* رفع الصورة من الجهاز حصرياً */}
+              <div>
+                <label className="block text-xs font-bold text-[var(--foreground)] mb-1">رفع صورة المنتج من الجهاز *</label>
+                <input
+                  type="file"
+                  required={!formData.image}
+                  accept="image/*"
+                  onChange={handleImageFileChange}
+                  className="w-full bg-[var(--card)] border border-[var(--border)] rounded-2xl px-4 py-2.5 text-sm text-[var(--foreground)] file:ml-4 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[var(--secondary)] file:text-white cursor-pointer"
+                />
+                {formData.image && (
+                  <p className="text-[10px] text-emerald-600 font-bold mt-1">✓ تم تحميل الصورة بنجاح وجاهزة للحفظ</p>
                 )}
+              </div>
+
+              {/* خانة الـ Alt الإجبارية */}
+              <div>
+                <label className="block text-xs font-bold text-[var(--foreground)] mb-1">النص البديل للصورة (Image Alt Text) *</label>
+                <input
+                  type="text"
+                  required
+                  value={formData.imageAlt}
+                  onChange={(e) => setFormData({ ...formData, imageAlt: e.target.value })}
+                  className="w-full bg-[var(--card)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[var(--secondary)]"
+                  placeholder="وصف مختصر للصورة لمحركات البحث (Alt text)..."
+                />
               </div>
 
               {/* حقول الفلاتر الديناميكية */}
@@ -679,7 +823,7 @@ export default function DashboardPage() {
             <div className="flex gap-2">
               <button
                 onClick={confirmModal.onConfirm}
-                className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold cursor-pointer hover:bg-red-700 transition"
+                className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold cursor-pointer"
               >
                 تأكيد الحذف
               </button>

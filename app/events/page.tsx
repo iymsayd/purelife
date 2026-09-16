@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { CalendarDays, ArrowUpRight, MapPin, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getEvents } from './eventService';
 import { db } from '@/lib/firebase';
@@ -52,14 +53,14 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
   const currentPage = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
   const pageSize = 10;
 
-    let events = [];
-    try {
-      const res = await getEvents();
-      events = Array.isArray(res) ? res : [];
-    } catch (error) {
-      console.error("Failed to fetch events:", error);
-      events = [];
-    }
+  let events = [];
+  try {
+    const res = await getEvents();
+    events = Array.isArray(res) ? res : [];
+  } catch (error) {
+    console.error("Failed to fetch events:", error);
+    events = [];
+  }
 
   const totalEvents = events.length;
   const totalPages = Math.ceil(totalEvents / pageSize);
@@ -109,11 +110,17 @@ export default async function EventsPage({ searchParams }: EventsPageProps) {
 
                     <div className="h-56 sm:h-60 bg-muted overflow-hidden relative">
                       {event.image ? (
-                        <img src={event.image} alt={event.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                        <Image 
+                          src={event.image} 
+                          alt={event.alt || event.title || "فعاليات بيورلايف"} 
+                          fill
+                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                          className="object-cover group-hover:scale-110 transition-transform duration-700" 
+                        />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-6xl bg-muted">📅</div>
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6 z-10">
                         <span className="text-white text-sm font-bold flex items-center gap-1">
                           اطلع على تفاصيل الحدث <ArrowUpRight size={16} />
                         </span>

@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { Tag, Sparkles, ArrowUpRight, ChevronRight, ChevronLeft } from 'lucide-react';
+import Image from 'next/image';
+import { Sparkles, ArrowUpRight, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getOffers } from './offerService';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
@@ -111,13 +112,19 @@ export default async function OffersPage({ searchParams }: OffersPageProps) {
                       </span>
                     )}
 
+                    {/* حاوية الصورة مع تفعيل خاصية relative لتعمل مع fill بشكل صحيح */}
                     <div className="h-56 sm:h-60 bg-muted overflow-hidden relative">
                       {offer.image ? (
-                        <img src={offer.image} alt={displayTitle} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                        <Image 
+                          src={offer.image} 
+                          alt={displayTitle} 
+                          fill 
+                          className="object-cover group-hover:scale-110 transition-transform duration-700" 
+                        />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-6xl bg-muted">🎁</div>
                       )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6 z-10">
                         <span className="text-white text-sm font-bold flex items-center gap-1">
                           اكتشف تفاصيل العرض <ArrowUpRight size={16} />
                         </span>

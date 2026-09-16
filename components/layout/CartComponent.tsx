@@ -1,6 +1,7 @@
 'use client';
 import { useCart } from '@/app/context/CartContext';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function CartComponent() {
   const { cartItems, removeFromCart, increaseQuantity, decreaseQuantity, clearCart, totalAmount, isMounted, dict } = useCart();
@@ -50,13 +51,20 @@ export default function CartComponent() {
           const itemTitle = item.titleAr || item.nameAr || item.title || item.name || 'منتج';
           const itemType = item.type || (item.isUsed ? 'used' : undefined);
           const itemId = item.id;
+          const imageAlt = itemTitle || "صورة المنتج في السلة";
 
           return (
             <div key={`${itemId}-${itemType || 'normal'}`} className="flex flex-col gap-3 border-b border-border/60 pb-4 last:border-0">
               <div className="flex items-center gap-3">
-                <div className="w-14 h-14 bg-muted rounded-2xl overflow-hidden shrink-0 border border-border flex items-center justify-center">
+                <div className="w-14 h-14 bg-muted rounded-2xl overflow-hidden shrink-0 border border-border flex items-center justify-center relative">
                   {item.image ? (
-                    <img src={item.image} alt={itemTitle} className="w-full h-full object-cover" />
+                    <Image 
+                      src={item.image} 
+                      alt={imageAlt} 
+                      fill 
+                      sizes="56px"
+                      className="object-cover" 
+                    />
                   ) : (
                     <span>📦</span>
                   )}

@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import Image from 'next/image';
 import { X, Tag, Sparkles, CheckCircle2, ArrowLeft, Loader2, Info, Lock } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -253,7 +254,12 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
       
       {offer.image && (
         <div className="w-full h-72 sm:h-80 md:h-[450px] rounded-[2rem] md:rounded-[2.5rem] overflow-hidden shadow-2xl border border-[var(--border)] relative group bg-[var(--secondary)]/5">
-          <img src={offer.image} alt={offer.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+          <Image 
+            src={offer.image} 
+            alt={offer.title || "عرض بيورلايف"} 
+            fill 
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-40"></div>
         </div>
       )}
@@ -264,7 +270,7 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
       </div>
 
       <div className="space-y-4 sm:space-y-6 px-2">
-        <h1 className="text-3xl sm:text-4xl md:text-6xl font-black tracking-tight text-[var(--secondary)] leading-tight">خصم 20% على فلاتر المياه</h1>
+        <h1 className="text-3xl sm:text-4xl md:text-6xl font-black tracking-tight text-[var(--secondary)] leading-tight">{offer.title || "خصم 20% على فلاتر المياه"}</h1>
         <p className="font-medium max-w-3xl mx-auto text-base sm:text-lg md:text-xl leading-relaxed opacity-85">{offer.desc}</p>
       </div>
 
@@ -294,8 +300,13 @@ export default function OfferClient({ offer, slug, allOffers }: { offer: any, sl
                 >
                   <div>
                     {item.image && (
-                      <div className="w-full h-36 sm:h-40 rounded-2xl overflow-hidden mb-4 border border-[var(--border)] bg-[var(--secondary)]/5">
-                        <img src={item.image} alt={itemTitle} className="w-full h-full object-cover" />
+                      <div className="w-full h-36 sm:h-40 rounded-2xl overflow-hidden mb-4 border border-[var(--border)] bg-[var(--secondary)]/5 relative">
+                        <Image 
+                          src={item.image} 
+                          alt={itemTitle} 
+                          fill 
+                          className="w-full h-full object-cover" 
+                        />
                       </div>
                     )}
                     <h3 className="font-extrabold text-base sm:text-lg mb-2 line-clamp-1">{itemTitle}</h3>

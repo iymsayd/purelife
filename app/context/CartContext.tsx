@@ -65,8 +65,8 @@ const dict = {
   emptyCart: "السلة فارغة 🛒",
   total: "الإجمالي",
   checkout: "إتمام الشراء",
-  quantityAlertTitle: "تنبيه الكمية",
-  quantityAlertDesc: "عذراً، الحد الأقص لكل منتج هو 10 قطع. للطلبات الكبيرة يرجى التواصل معنا.",
+  quantityAlertTitle: "تنبيه المخزون / الكمية",
+  quantityAlertDesc: "عذراً، الكمية المطلوبة غير متوفرة في المخزون أو تم تجاوز الحد الأقصى المسموح به (10 قطع).",
   close: "إغلاق"
 };
 
@@ -122,13 +122,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const titleAr = product.nameAr || product.title || 'منتج بدون اسم';
     const itemType = product.type || (product.isUsed ? 'used' : undefined);
     const isUsedValue = itemType === 'used';
+    const maxStock = Number(product.stock ?? product.quantity ?? 10);
 
     const existingIndex = cartItems.findIndex(
       item => String(item.id) === String(product.id) && 
               ((item.type || (item.isUsed ? 'used' : undefined)) === (itemType || undefined))
     );
     
-    if (existingIndex > -1 && cartItems[existingIndex].quantity >= 10) {
+    const currentQty = existingIndex > -1 ? cartItems[existingIndex].quantity : 0;
+    const limit = Math.min(maxStock, 10);
+
+    if (currentQty >= limit) {
       setShowModal(true);
       return;
     }
@@ -136,7 +140,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     let updated;
     if (existingIndex > -1) {
       updated = cartItems.map((item, i) => 
-        i === existingIndex ? { ...item, quantity: item.quantity + 1, titleAr, type: itemType, isUsed: isUsedValue } : item
+        i === existingIndex ? { ...item, quantity: item.quantity + 1, titleAr, type: itemType, isUsed: isUsedValue, stock: maxStock } : item
       );
     } else {
       updated = [...cartItems, { 
@@ -144,7 +148,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         titleAr, 
         quantity: 1, 
         type: itemType, 
-        isUsed: isUsedValue 
+        isUsed: isUsedValue,
+        stock: maxStock
       }];
     }
 
@@ -153,10 +158,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const increaseQuantity = (id: string, type?: string) => {
     const item = cartItems.find(i => String(i.id) === String(id) && ((i.type || (i.isUsed ? 'used' : undefined)) === (type || undefined)));
-    if (item && item.quantity >= 10) {
+    if (!item) return;
+
+    const maxStock = Number(item.stock ?? 10);
+    const limit = Math.min(maxStock, 10);
+
+    if (item.quantity >= limit) {
       setShowModal(true);
       return;
     }
+
     const updated = cartItems.map(i => 
       String(i.id) === String(id) && ((i.type || (i.isUsed ? 'used' : undefined)) === (type || undefined)) 
         ? { ...i, quantity: i.quantity + 1 } 

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, updateDoc, orderBy, query } from 'firebase/firestore';
-import { Upload, Link as LinkIcon, Save, Trash2, Mail, CheckCircle, RefreshCw, Eye, X, Calendar, User, ShieldCheck } from 'lucide-react';
+import { Upload, Save, Trash2, Mail, CheckCircle, RefreshCw, Eye, X, Calendar, User, ShieldCheck } from 'lucide-react';
 
 interface FooterMessage {
   id: string;
@@ -22,7 +22,7 @@ export default function AdminSettingsPage() {
   const [selectedMessage, setSelectedMessage] = useState<FooterMessage | null>(null);
   const [registeredUsersEmails, setRegisteredUsersEmails] = useState<Set<string>>(new Set());
   
-  // إعدادات الموقع واللوجو والفوتر (ضمان عدم وجود قيم undefined أبداً لتحويل الـ inputs إلى controlled بالكامل)
+  // إعدادات الموقع وتتضمن أيقونة/شعار الهيدر (logoUrl)
   const [settings, setSettings] = useState({
     logoUrl: '/Images/pure-logo.jpeg',
     footerTitle: 'بيورلايف لحياة أفضل',
@@ -36,62 +36,78 @@ export default function AdminSettingsPage() {
     copyright: '© 2026 بيورلايف - جميع الحقوق محفوظة'
   });
 
-  const [uploadType, setUploadType] = useState<'url' | 'file'>('url');
   const [messages, setMessages] = useState<FooterMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(true);
 
-  // جلب الإعدادات والرسائل والمستخدمين المسجلين عند التحميل
+  // استخدام نظام حماية من تسريب الذاكرة وتحديث الحالة لمكون تم إلغاؤه (Memory Leak / Unmounted State Update)
   useEffect(() => {
-    fetchSettings();
-    fetchMessages();
-    fetchRegisteredUsers();
-  }, []);
+    let isMounted = true;
 
-  const fetchSettings = async () => {
-    try {
-      setLoading(true);
-      const docRef = doc(db, 'settings', 'site_content');
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setSettings(prev => ({
-          ...prev,
-          logoUrl: data.logoUrl !== undefined && data.logoUrl !== null ? String(data.logoUrl) : '',
-          footerTitle: data.footerTitle !== undefined && data.footerTitle !== null ? String(data.footerTitle) : '',
-          footerDescription: data.footerDescription !== undefined && data.footerDescription !== null ? String(data.footerDescription) : '',
-          footerEmail: data.footerEmail !== undefined && data.footerEmail !== null ? String(data.footerEmail) : '',
-          footerPhone: data.footerPhone !== undefined && data.footerPhone !== null ? String(data.footerPhone) : '',
-          facebook: data.facebook !== undefined && data.facebook !== null ? String(data.facebook) : '',
-          instagram: data.instagram !== undefined && data.instagram !== null ? String(data.instagram) : '',
-          twitter: data.twitter !== undefined && data.twitter !== null ? String(data.twitter) : '',
-          linkedin: data.linkedin !== undefined && data.linkedin !== null ? String(data.linkedin) : '',
-          copyright: data.copyright !== undefined && data.copyright !== null ? String(data.copyright) : ''
-        }));
-      }
-    } catch (error) {
-      console.error("Error fetching settings:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const loadAllData = async () => {
+      try {
+        setLoading(true);
+        setLoadingMessages(true);
 
-  // جلب المستخدمين المسجلين لمعرفة ما إذا كان صاحب الرسالة عضواً مسجلاً أم زائراً
-  const fetchRegisteredUsers = async () => {
-    try {
-      const usersRef = collection(db, 'users');
-      const usersSnap = await getDocs(usersRef);
-      const emailsSet = new Set<string>();
-      usersSnap.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data.email) {
-          emailsSet.add(String(data.email).toLowerCase().trim());
+        // جلب الإعدادات والرسائل والمستخدمين بالتوازي أو التتابع الآمن
+        const [settingsSnap, usersSnap, messagesQuerySnap] = await Promise.all([
+          getDoc(doc(db, 'settings', 'site_content')),
+          getDocs(collection(db, 'users')),
+          getDocs(query(collection(db, 'footer_messages'), orderBy('createdAt', 'desc')))
+        ]);
+
+        if (!isMounted) return;
+
+        // 1. معالجة الإعدادات
+        if (settingsSnap.exists()) {
+          const data = settingsSnap.data();
+          setSettings(prev => ({
+            ...prev,
+            logoUrl: data.logoUrl ?? '',
+            footerTitle: data.footerTitle ?? '',
+            footerDescription: data.footerDescription ?? '',
+            footerEmail: data.footerEmail ?? '',
+            footerPhone: data.footerPhone ?? '',
+            facebook: data.facebook ?? '',
+            instagram: data.instagram ?? '',
+            twitter: data.twitter ?? '',
+            linkedin: data.linkedin ?? '',
+            copyright: data.copyright ?? ''
+          }));
         }
-      });
-      setRegisteredUsersEmails(emailsSet);
-    } catch (error) {
-      console.error("Error fetching registered users:", error);
-    }
-  };
+
+        // 2. معالجة المستخدمين المسجلين
+        const emailsSet = new Set<string>();
+        usersSnap.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data.email) {
+            emailsSet.add(String(data.email).toLowerCase().trim());
+          }
+        });
+        setRegisteredUsersEmails(emailsSet);
+
+        // 3. معالجة الرسائل
+        const msgs: FooterMessage[] = [];
+        messagesQuerySnap.forEach((docItem) => {
+          msgs.push({ id: docItem.id, ...docItem.data() } as FooterMessage);
+        });
+        setMessages(msgs);
+
+      } catch (error) {
+        console.error("Error loading admin data:", error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+          setLoadingMessages(false);
+        }
+      }
+    };
+
+    loadAllData();
+
+    return () => {
+      isMounted = false; // إلغاء تفعيل التحديثات عند مغادرة الصفحة
+    };
+  }, []);
 
   const fetchMessages = async () => {
     try {
@@ -110,7 +126,7 @@ export default function AdminSettingsPage() {
     }
   };
 
-  // التعامل مع رفع الصورة من الجهاز وتحويلها إلى Base64 أو رابط مؤقت
+  // معالجة رفع صورة أيقونة الهيدر من الجهاز حصراً
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -122,7 +138,6 @@ export default function AdminSettingsPage() {
     }
   };
 
-  // حفظ الإعدادات في Firestore
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -130,10 +145,10 @@ export default function AdminSettingsPage() {
       const docRef = doc(db, 'settings', 'site_content');
       await setDoc(docRef, settings, { merge: true });
       
-      // إطلاق حدث لتحديث الهيدر والفوتر فوراً في أي نافذة مفتوحة
+      // إطلاق حدث لتحديث الهيدر فوراً في أي نافذة مفتوحة
       window.dispatchEvent(new Event('siteSettingsUpdated'));
 
-      setSuccessMessage('تم حفظ الإعدادات بنجاح!');
+      setSuccessMessage('تم حفظ الإعدادات وأيقونة الهيدر بنجاح!');
       setTimeout(() => setSuccessMessage(''), 4000);
     } catch (error) {
       console.error("Error saving settings:", error);
@@ -143,7 +158,6 @@ export default function AdminSettingsPage() {
     }
   };
 
-  // حذف رسالة من لوحة التحكم
   const handleDeleteMessage = async (id: string) => {
     if (!confirm('هل أنت متأكد من حذف هذه الرسالة؟')) return;
     try {
@@ -155,7 +169,6 @@ export default function AdminSettingsPage() {
     }
   };
 
-  // تعليم الرسالة كمقروءة
   const handleToggleRead = async (id: string, currentStatus: boolean) => {
     try {
       await updateDoc(doc(db, 'footer_messages', id), { read: !currentStatus });
@@ -186,7 +199,7 @@ export default function AdminSettingsPage() {
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl text-right" dir="rtl">
       <h1 className="text-2xl md:text-3xl font-extrabold mb-8 border-b pb-4 flex items-center gap-3">
-        ⚙️ لوحة تحكم الهيدر، الفوتر والرسائل
+        ⚙️ لوحة التحكم (إدارة الهيدر، الفوتر والرسائل)
       </h1>
 
       {successMessage && (
@@ -195,55 +208,35 @@ export default function AdminSettingsPage() {
         </div>
       )}
 
-      {/* نموذج تعديل إعدادات الهيدر والفوتر */}
+      {/* نموذج التعديل */}
       <form onSubmit={handleSaveSettings} className="bg-[var(--background)] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm mb-12">
-        <h2 className="text-xl font-bold mb-6 text-[#0ea5e9]">تعديل محتوى الهيدر والفوتر</h2>
+        <h2 className="text-xl font-bold mb-6 text-[#0ea5e9]">إعدادات الهيدر والفوتر</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          {/* إعدادات الشعار (اللوجو) */}
-          <div className="md:col-span-2 bg-[var(--background)] p-4 rounded-xl border border-gray-200 dark:border-gray-700">
-            <label className="block font-bold text-sm mb-2">شعار الهيدر (Logo)</label>
-            <div className="flex gap-4 mb-3">
-              <button
-                type="button"
-                onClick={() => setUploadType('url')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition text-white ${uploadType === 'url' ? 'bg-[#0ea5e9]' : 'bg-gray-600 dark:bg-gray-800'}`}
-              >
-                رابط مباشر (URL)
-              </button>
-              <button
-                type="button"
-                onClick={() => setUploadType('file')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition text-white ${uploadType === 'file' ? 'bg-[#0ea5e9]' : 'bg-gray-600 dark:bg-gray-800'}`}
-              >
-                رفع من الجهاز
-              </button>
-            </div>
+          
+          {/* تحكم خاص بأيقونة الهيدر (Logo / Header Icon) - رفع من الجهاز فقط */}
+          <div className="md:col-span-2 bg-[var(--background)] p-5 rounded-xl border border-sky-500/30 bg-sky-500/5">
+            <label className="block font-bold text-base mb-2 text-[#0ea5e9] flex items-center gap-2">
+              <Upload size={18} /> أيقونة وشعار الهيدر الرئيسي (رفع من الجهاز)
+            </label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+              اختر صورة من جهازك لتكون الشعار الرسمي في شريط التنقل العلوي (الهيدر) لكل الزوار والمستخدمين.
+            </p>
 
-            {uploadType === 'url' ? (
-              <input
-                type="text"
-                value={settings.logoUrl || ''}
-                onChange={(e) => setSettings({ ...settings, logoUrl: e.target.value })}
-                className="w-full p-2.5 rounded-xl bg-[var(--background)] border border-gray-300 dark:border-gray-700 text-sm outline-none focus:border-[#0ea5e9]"
-                placeholder="أدخل رابط الصورة هنا..."
-              />
-            ) : (
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImageChange}
-                className="w-full p-2 rounded-xl bg-[var(--background)] border border-gray-300 dark:border-gray-700 text-sm cursor-pointer"
-              />
-            )}
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="w-full p-2.5 rounded-xl bg-[var(--background)] border border-gray-300 dark:border-gray-700 text-sm cursor-pointer mb-4"
+            />
 
-            <div className="mt-3 flex items-center gap-3">
-              <span className="text-xs text-gray-500">معاينة الشعار الحالي:</span>
-              <img src={settings.logoUrl || ''} alt="Logo Preview" className="h-10 object-contain bg-white p-1 rounded border" />
+            <div className="flex items-center gap-4 bg-white dark:bg-neutral-900 p-3 rounded-xl border border-gray-200 dark:border-gray-800 w-fit">
+              <span className="text-xs font-bold text-gray-500">معاينة الأيقونة الحالية للهيدر:</span>
+              <img src={settings.logoUrl || ''} alt="Header Logo Preview" className="h-12 w-12 object-contain bg-gray-100 p-1 rounded-lg border shadow-xs" />
             </div>
           </div>
 
-          {/* عنوان الفوتر */}
+          {/* بقية حقول إعدادات الفوتر */}
           <div>
             <label className="block font-bold text-sm mb-1">عنوان الفوتر الرئيسي</label>
             <input
@@ -254,7 +247,6 @@ export default function AdminSettingsPage() {
             />
           </div>
 
-          {/* البريد الإلكتروني للفوتر */}
           <div>
             <label className="block font-bold text-sm mb-1">البريد الإلكتروني للفوتر</label>
             <input
@@ -265,7 +257,6 @@ export default function AdminSettingsPage() {
             />
           </div>
 
-          {/* أرقام التواصل */}
           <div>
             <label className="block font-bold text-sm mb-1">أرقام التواصل الهاتفي</label>
             <input
@@ -276,7 +267,6 @@ export default function AdminSettingsPage() {
             />
           </div>
 
-          {/* حقوق النشر */}
           <div>
             <label className="block font-bold text-sm mb-1">نص حقوق النشر (Copyright)</label>
             <input
@@ -287,7 +277,6 @@ export default function AdminSettingsPage() {
             />
           </div>
 
-          {/* وصف الفوتر (يدعم HTML مثل <br />) */}
           <div className="md:col-span-2">
             <label className="block font-bold text-sm mb-1">نبذة / وصف الفوتر (يقبل أكواد HTML مثل &lt;br /&gt;)</label>
             <textarea
@@ -298,7 +287,6 @@ export default function AdminSettingsPage() {
             />
           </div>
 
-          {/* روابط السوشيال ميديا */}
           <div>
             <label className="block font-bold text-sm mb-1">رابط فيسبوك</label>
             <input
@@ -345,11 +333,11 @@ export default function AdminSettingsPage() {
           disabled={saving}
           className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white font-bold py-3 px-6 rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
         >
-          <Save size={18} /> {saving ? 'جاري الحفظ...' : 'حفظ التعديلات وتحديث الموقع'}
+          <Save size={18} /> {saving ? 'جاري الحفظ...' : 'حفظ التعديلات وتحديث الموقع فوراً'}
         </button>
       </form>
 
-      {/* قسم عرض رسائل الفوتر (Footer Messages) مع تفاصيل ومعاينة وحالة المستخدم */}
+      {/* قسم رسائل الفوتر ونموذج التواصل الواردة */}
       <div className="bg-[var(--background)] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-[#0ea5e9] flex items-center gap-2">
@@ -384,7 +372,6 @@ export default function AdminSettingsPage() {
                       <span className="font-bold text-base">{msg.name}</span>
                       <a href={`mailto:${msg.email}`} className="text-xs text-[#0ea5e9] hover:underline" dir="ltr">{msg.email}</a>
                       
-                      {/* شارة توضح ما إذا كان زائراً أم عضواً مسجلاً */}
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
                         isRegistered ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30'
                       }`}>
@@ -399,7 +386,6 @@ export default function AdminSettingsPage() {
                         {new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }).format(parseSafeDate(msg.createdAt))}
                       </span>
                       
-                      {/* زر معاينة التفاصيل */}
                       <button
                         onClick={() => setSelectedMessage(msg)}
                         className="px-3 py-1 rounded-lg text-xs font-bold bg-[#0ea5e9]/10 text-[#0ea5e9] hover:bg-[#0ea5e9]/20 transition cursor-pointer flex items-center gap-1"
@@ -508,7 +494,8 @@ export default function AdminSettingsPage() {
                 className={`px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition ${selectedMessage.read ? 'bg-neutral-800 text-neutral-300' : 'bg-emerald-600 text-white'}`}
               >
                 {selectedMessage.read ? 'تعليم غير مقروءة' : 'تعليم كمقروءة'}
-              </button><button onClick={() => setSelectedMessage(null)} className="px-5 py-2 rounded-xl text-xs font-bold bg-[#0ea5e9] hover:bg-[#0ea5e9]/90 text-white transition-all cursor-pointer">
+              </button>
+              <button onClick={() => setSelectedMessage(null)} className="px-5 py-2 rounded-xl text-xs font-bold bg-[#0ea5e9] hover:bg-[#0ea5e9]/90 text-white transition-all cursor-pointer">
                 إغلاق
               </button>
             </div>

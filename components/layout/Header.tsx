@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { Menu, X, ChevronDown, AlertTriangle, IdCard } from 'lucide-react';
 import { auth, db } from '@/lib/firebase';
@@ -139,7 +140,7 @@ export default function Header() {
 
   return (
     <header className="bg-[var(--background)] text-[var(--foreground)] border-b-2 border-gray-100 dark:border-gray-700/50 py-4 sticky top-0 z-40 transition-colors duration-300 shadow-sm">
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-4 md:px-8 max-w-7xl">
         
         {/* Top Section */}
         <div className="flex flex-col items-center justify-center mb-4 relative gap-3">
@@ -154,9 +155,27 @@ export default function Header() {
             </button>
           </div>
 
-          <div className="flex flex-col md:flex-row items-center justify-center gap-2 md:gap-0 w-full">
+          {/* تم تعديل المحاذاة بـ px خفيفة لتكون مسحوبة للداخل ومطابقة لعرض الـ Navigation */}
+          <div className="flex flex-col md:flex-row items-center justify-between w-full px-2 md:px-4">
             
-            <div className="flex items-center justify-center order-2 md:order-1">
+            {/* 1. اللوجو على اليمين مع مسافة داخلية مريحة */}
+            <div className="flex justify-center items-center order-1 my-1 md:my-0 min-h-[48px]">
+              <Link href="/" className="inline-block">
+                <div className="relative w-28 md:w-32 h-12">
+                  <Image 
+                    src={logoUrl} 
+                    alt="PureLife Logo" 
+                    fill
+                    sizes="(max-width: 768px) 112px, 128px"
+                    className="object-contain transition-opacity duration-300"
+                    priority
+                  />
+                </div>
+              </Link>
+            </div>
+
+            {/* 2. أزرار الحسابات وتسجيل الدخول على اليسار بمسافة داخلية متوازنة */}
+            <div className="flex items-center justify-center gap-2 order-3 mt-2 md:mt-0">
               {isMounted && user ? (
                 <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800/80 px-2.5 py-1 rounded-full border border-gray-200 dark:border-gray-700 text-xs shadow-xs">
                   <Link 
@@ -177,34 +196,20 @@ export default function Header() {
                   </button>
                 </div>
               ) : isMounted ? (
-                <Link 
-                  href="/login" 
-                  className="text-xs md:text-sm font-bold text-[#0ea5e9] bg-[#0ea5e9]/10 hover:bg-[#0ea5e9] hover:text-white transition-all px-3.5 py-1.5 rounded-lg border border-[#0ea5e9]/30 shadow-xs"
-                >
-                  تسجيل دخول
-                </Link>
-              ) : null}
-            </div>
-
-            <div className="flex justify-center items-center order-1 md:order-2 my-1 md:my-0 md:mx-3 min-h-[48px]">
-              <Link href="/" className="inline-block">
-                <img 
-                  src={logoUrl} 
-                  alt="PureLife Logo" 
-                  className="w-28 md:w-32 h-auto object-contain transition-opacity duration-300"
-                  loading="eager"
-                />
-              </Link>
-            </div>
-
-            <div className="flex items-center justify-center order-3 md:order-3">
-              {isMounted && !user ? (
-                <Link 
-                  href="/register" 
-                  className="text-xs md:text-sm font-bold bg-[#0ea5e9] text-white hover:bg-[#0284c7] transition-all px-3.5 py-1.5 rounded-lg shadow-xs"
-                >
-                  انشاء حساب
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link 
+                    href="/login" 
+                    className="text-xs md:text-sm font-bold text-[#0ea5e9] bg-[#0ea5e9]/10 hover:bg-[#0ea5e9] hover:text-white transition-all px-3.5 py-1.5 rounded-lg border border-[#0ea5e9]/30 shadow-xs"
+                  >
+                    تسجيل دخول
+                  </Link>
+                  <Link 
+                    href="/register" 
+                    className="text-xs md:text-sm font-bold bg-[#0ea5e9] text-white hover:bg-[#0284c7] transition-all px-3.5 py-1.5 rounded-lg shadow-xs"
+                  >
+                    انشاء حساب
+                  </Link>
+                </div>
               ) : null}
             </div>
 

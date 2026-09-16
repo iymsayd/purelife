@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/app/context/CartContext'; 
 import { auth, db } from '@/lib/firebase';
@@ -136,7 +137,7 @@ export default function CheckoutPage() {
     return Object.keys(errors).length === 0;
   };
 
-  // إرسال الطلب وتحديث بيانات اليوزر الفعلية وإرساله لجوجل شيت عبر messageService
+  // إرسال الطلب وتحديث بيانات اليوزر الفعلية والتحقق من المخزون وإرساله لجوجل شيت عبر messageService
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -164,6 +165,16 @@ export default function CheckoutPage() {
       return;
     }
 
+    // التحقق من توفر المخزون لكل منتج في السلة قبل إتمام الطلب
+    for (const item of cartItems) {
+      const stock = Number(item.stock ?? item.quantity ?? 999);
+      const requestedQty = Number(item.quantity ?? 1);
+      if (requestedQty > stock) {
+        alert(`عذراً، الكمية المطلوبة للمنتج "${getLocalizedItemTitle(item)}" غير متوفرة بالكامل في المخزون المتاح (${stock} فقط).`);
+        return;
+      }
+    }
+
     setSubmitting(true);
     setLastSubmitTime(now);
 
@@ -183,7 +194,7 @@ export default function CheckoutPage() {
         updatedAt: serverTimestamp(),
       });
 
-      // 4. تجهيز عناصر الطلب
+      // 4. تجهيز عناصر الطلب وتحديث الـ Stock في قاعدة البيانات إن أمكن
       const formattedItems = cartItems.map((item) => ({
         id: item.id || '',
         title: getLocalizedItemTitle(item),
@@ -192,6 +203,27 @@ export default function CheckoutPage() {
         type: item.type || (item.isUsed ? 'used' : 'new'),
         image: item.image || '',
       }));
+
+      // تحديث مخزون المنتجات في قاعدة البيانات إن وُجدت كولكشن للمنتجات
+      for (const item of cartItems) {
+        if (item.id) {
+          try {
+            const productRef = doc(db, item.type === 'used' ? 'used-products' : 'products', String(item.id));
+            const productSnap = await getDoc(productRef);
+            if (productSnap.exists()) {
+              const currentStock = Number(productSnap.data().stock ?? productSnap.data().quantity ?? 10);
+              const newStock = Math.max(0, currentStock - Number(item.quantity || 1));
+              await updateDoc(productRef, {
+                stock: newStock,
+                quantity: newStock,
+                updatedAt: serverTimestamp()
+              });
+            }
+          } catch (stockErr) {
+            console.error("Error updating product stock in database:", stockErr);
+          }
+        }
+      }
 
       // نص منسق تفصيلي للمنتجات ليظهر بشكل احترافي في الشيت والرسائل
       const itemsSummaryText = formattedItems
@@ -467,16 +499,22 @@ export default function CheckoutPage() {
               </h3>
               <span className="text-xs bg-sky-500/10 text-sky-500 font-bold px-2.5 py-1 rounded-full border border-sky-500/20">
                 {cartItems.length} منتجات
-            </span>
+              </span>
             </div>
             
             <div className="space-y-3.5 max-h-80 overflow-y-auto mb-4 ps-1">
               {cartItems.map((item, index) => (
                 <div key={index} className="flex items-center justify-between gap-3 text-sm pb-3 border-b border-border/50 last:border-none">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-14 h-14 bg-secondary/10 border border-border rounded-2xl overflow-hidden shrink-0 flex items-center justify-center">
+                    <div className="w-14 h-14 bg-secondary/10 border border-border rounded-2xl overflow-hidden shrink-0 flex items-center justify-center relative">
                       {item.image ? (
-                        <img src={item.image} alt={getLocalizedItemTitle(item)} className="w-full h-full object-cover" />
+                        <Image 
+                          src={item.image} 
+                          alt={getLocalizedItemTitle(item)} 
+                          fill
+                          sizes="56px"
+                          className="object-cover" 
+                        />
                       ) : (
                         <span className="text-xl">📦</span>
                       )}
@@ -519,9 +557,9 @@ export default function CheckoutPage() {
                 <span>الإجمالي الكلي</span>
                 <span className="text-sky-500 text-lg sm:text-xl font-black whitespace-nowrap">{totalAmount} ج.م</span>
               </div>
-          </div>
+         </div>
 
-          <div className="mt-6 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-purple-500/10 p-4 rounded-2xl border border-sky-500/20 flex items-start gap-3 shadow-inner">
+         <div className="mt-6 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-purple-500/10 p-4 rounded-2xl border border-sky-500/20 flex items-start gap-3 shadow-inner">
             <ShieldCheck className="text-sky-500 shrink-0 mt-0.5" size={20} />
             <p className="text-xs text-foreground/80 leading-relaxed">
               ضمان حقيقي ودعم فني متواصل لجميع منتجات معالجة المياه والتكييفات والمنتجات المستعملة والجديدة.

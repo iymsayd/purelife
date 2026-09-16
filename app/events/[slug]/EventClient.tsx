@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import Image from 'next/image';
 import { X, MapPin, Calendar, Sparkles, CheckCircle2, ArrowLeft, Loader2, Info, Lock, Trash2, ChevronDown } from 'lucide-react';
 import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
@@ -268,7 +269,14 @@ export default function EventClient({ event, allEvents }: { event: any; allEvent
       
       {event.image && (
         <div className="w-full h-80 md:h-[450px] rounded-[2.5rem] overflow-hidden shadow-2xl border border-[var(--border)] relative group bg-[var(--secondary)]/5">
-          <img src={event.image} alt={event.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+          <Image 
+            src={event.image} 
+            alt={event.title || "تفاصيل الحدث"} 
+            fill 
+            sizes="(max-width: 768px) 100vw, 800px"
+            priority
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" 
+          />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-40"></div>
         </div>
       )}
@@ -319,8 +327,14 @@ export default function EventClient({ event, allEvents }: { event: any; allEvent
                 >
                   <div>
                     {item.image && (
-                      <div className="w-full h-40 rounded-2xl overflow-hidden mb-4 border border-[var(--border)] bg-[var(--secondary)]/5">
-                        <img src={item.image} alt={item.title} className="w-full h-full object-cover" />
+                      <div className="w-full h-40 rounded-2xl overflow-hidden mb-4 border border-[var(--border)] bg-[var(--secondary)]/5 relative">
+                        <Image 
+                          src={item.image} 
+                          alt={item.title || "حدث آخر"} 
+                          fill 
+                          sizes="320px"
+                          className="w-full h-full object-cover" 
+                        />
                       </div>
                     )}
                     <h3 className="font-extrabold text-lg mb-2 line-clamp-1">{item.title}</h3>

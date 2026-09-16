@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useCart } from '@/app/context/CartContext';
 import { useState } from 'react';
 
@@ -33,7 +34,12 @@ export default function ProductCard({ product, isUsed = false }: ProductCardProp
   const isAdded = !!cartItem;
   const cartItemCount = cartItem ? cartItem.quantity : 0;
 
-  const title = product.nameAr || product.title || '';
+  // التحقق من المخزون (Stock)
+  const stock = Number(product.stock ?? product.quantity ?? 999);
+  const isOutOfStock = stock <= 0;
+
+  const title = product.nameAr || product.title || product.name || '';
+  const imageAlt = title || "منتج متجر بيورلايف";
   const category = product.categoryAr || product.category || '';
   const brand = product.brandAr || product.brand || '';
   const categoryKey = String(product.category || product.categoryKey || '').toLowerCase();
@@ -47,6 +53,7 @@ export default function ProductCard({ product, isUsed = false }: ProductCardProp
     
     switch (action) {
       case 'add':
+        if (isOutOfStock) return;
         addToCart?.(productData);
         setShowAdded(true);
         setTimeout(() => setShowAdded(false), 1500);
@@ -66,15 +73,27 @@ export default function ProductCard({ product, isUsed = false }: ProductCardProp
   return (
     <div className="bg-[var(--background)] text-[var(--foreground)] rounded-3xl shadow-sm hover:shadow-2xl transition-all duration-500 overflow-hidden border border-[var(--border)] flex flex-col justify-between group hover:-translate-y-1.5 relative p-4 sm:p-5" dir="rtl">
       
-      {product.condition && (
+      {product.condition && !isOutOfStock && (
         <span className="absolute top-6 right-6 z-10 bg-[var(--secondary)] text-white text-[10px] px-3 py-1.5 rounded-full font-black shadow-md">
           {product.condition}
         </span>
       )}
 
-      <div className="h-48 sm:h-52 bg-[var(--card)] rounded-2xl mb-4 overflow-hidden relative border border-[var(--border)] flex items-center justify-center">
+      {isOutOfStock && (
+        <span className="absolute top-6 right-6 z-10 bg-red-500 text-white text-[10px] px-3 py-1.5 rounded-full font-black shadow-md">
+          نفذت الكمية
+        </span>
+      )}
+
+      <div className={`h-48 sm:h-52 bg-[var(--card)] rounded-2xl mb-4 overflow-hidden relative border border-[var(--border)] flex items-center justify-center ${isOutOfStock ? 'opacity-60 grayscale' : ''}`}>
         {product.image ? (
-          <img src={product.image} alt={title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+          <Image 
+            src={product.image} 
+            alt={imageAlt} 
+            fill 
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="object-cover group-hover:scale-105 transition-transform duration-700" 
+          />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-4xl bg-[var(--card)]">📦</div>
         )}
@@ -109,6 +128,19 @@ export default function ProductCard({ product, isUsed = false }: ProductCardProp
               <div className="bg-[var(--secondary)] text-white py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center opacity-0">
                 اضافة للسلة
               </div>
+            </div>
+          ) : isOutOfStock ? (
+            <div className="grid grid-cols-2 gap-2.5 mt-auto">
+              <Link href={linkPath} className="bg-[var(--card)] border border-[var(--border)] text-center py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold hover:bg-[var(--secondary)]/10 transition flex items-center justify-center text-[var(--foreground)]">
+                تفاصيل
+              </Link>
+              <button 
+                type="button" 
+                disabled 
+                className="bg-gray-300 dark:bg-zinc-800 text-gray-500 dark:text-zinc-500 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold cursor-not-allowed flex items-center justify-center"
+              >
+                نفذت الكمية
+              </button>
             </div>
           ) : !isAdded ? (
             <div className="grid grid-cols-2 gap-2.5 mt-auto">

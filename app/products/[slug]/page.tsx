@@ -37,6 +37,8 @@ export default async function ProductPage({ params }: Props) {
 
   const product = { 
     ...rawData,
+    // لو حقل stock مش موجود في الداتا بيز، بنديه افتراضي 99 عشان المنتجات القديمة تفضل شغال عادي
+    stock: typeof rawData.stock === 'number' ? rawData.stock : 99,
     createdAt: rawData.createdAt?.toDate ? rawData.createdAt.toDate().toISOString() : null,
   };
 

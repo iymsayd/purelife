@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { BookOpen, ArrowUpRight, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getBlogs } from '@/app/blog/blogService';
 
@@ -91,11 +92,17 @@ export default async function BlogPage({ searchParams }: BlogPageProps) {
                 
                 <div className="h-56 sm:h-60 bg-muted overflow-hidden relative">
                   {post.image ? (
-                    <img src={post.image} alt={post.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                    <Image 
+                      src={post.image} 
+                      alt={post.title || "مقال من مدونة بيورلايف"} 
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      className="object-cover group-hover:scale-110 transition-transform duration-700" 
+                    />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-6xl bg-muted">📖</div>
                   )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6 z-10">
                     <span className="text-white text-sm font-bold flex items-center gap-1">
                       اقرأ المقال <ArrowUpRight size={16} />
                     </span>

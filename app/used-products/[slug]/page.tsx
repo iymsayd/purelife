@@ -1,6 +1,6 @@
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, getDocs, query, where, limit } from 'firebase/firestore';
-import ProductDetailsClient from '@/app/used-products/[slug]/ProductDetailsClient';
+import ProductDetailsClient from './ProductDetailsClient';
 import CartComponent from '@/components/layout/CartComponent';
 import { Metadata } from 'next';
 
@@ -15,6 +15,7 @@ async function getProductData(identifier: string) {
   const cleanId = identifier ? decodeURIComponent(identifier).trim() : '';
   if (!cleanId) return null;
 
+  // البحث في الـ collections الخاصة بالمنتجات المستعملة
   for (const colName of ['used-products', 'used_products']) {
     const docRef = doc(db, colName, cleanId);
     const docSnap = await getDoc(docRef);
@@ -61,13 +62,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function ProductPage({ params }: Props) {
+export default async function UsedProductPage({ params }: Props) {
   const { slug } = await params;
   const rawData: any = await getProductData(slug);
 
   if (!rawData) {
     return (
-      <div className="p-20 text-center bg-[var(--background)] text-[var(--foreground)] text-lg font-bold" dir="rtl">
+      <div className="p-20 text-center bg-[var(--background)] text-[var(--foreground)] text-lg font-bold min-h-screen flex items-center justify-center" dir="rtl">
         المنتج المستعمل غير موجود.
       </div>
     );
@@ -75,6 +76,8 @@ export default async function ProductPage({ params }: Props) {
 
   const product = {
     ...rawData,
+    // ضبط المخزون بـ 99 افتراضياً لو الحقل مش موجود، مع الحفاظ على القيمة الحقيقية لو متوفرة
+    stock: typeof rawData.stock === 'number' ? rawData.stock : 99,
     createdAt: rawData.createdAt?.toDate ? rawData.createdAt.toDate().toISOString() : null,
   };
 

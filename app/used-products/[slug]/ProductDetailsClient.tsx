@@ -1,11 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { useCart } from '@/app/context/CartContext';
 
 const dict = {
   conditionLabel: "حالة المنتج:",
   description: "وصف المنتج:",
   addToCart: "اضافة للسلة",
+  outOfStock: "غير متاح حالياً",
   added: "تمت الإضافة بنجاح! ✅",
   addedCartCheck: "تمت الإضافة للسلة بنجاح ✓",
   quantity: "الكمية:",
@@ -38,6 +40,7 @@ interface Product {
   sterilization?: string;
   price?: number | string;
   image?: string;
+  stock?: number;
   createdAt?: string | null;
   [key: string]: any;
 }
@@ -58,6 +61,10 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
   const displayTitle = product.nameAr || product.titleAr || product.title || product.name || '';
   const displayDesc = product.descriptionAr || product.descAr || product.description || '';
   const condition = product.conditionAr || product.condition || '';
+
+  // التحقق من المخزون (لو مش موجود بيتاخد افتراضي 99)
+  const currentStock = typeof product.stock === 'number' ? product.stock : 99;
+  const isOutOfStock = currentStock <= 0;
 
   const getProductDetails = () => {
     const category = product.category || "";
@@ -101,6 +108,7 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
     name: displayTitle,
     type: 'used',
     isUsed: true,
+    stock: currentStock,
   };
 
   const safeCart = Array.isArray(cartItems) ? cartItems : [];
@@ -109,6 +117,7 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
   const cartItemCount = cartItem ? cartItem.quantity : 0;
 
   const handleAddToCart = () => {
+    if (currentStock <= 0) return;
     addToCart(productForCart);
     setShowAdded(true);
     setTimeout(() => setShowAdded(false), 1500);
@@ -122,15 +131,21 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
     <main className="max-w-4xl mx-auto" dir="rtl">
       <div className="grid md:grid-cols-2 gap-8 lg:gap-12 bg-[var(--background)] text-[var(--foreground)] p-6 md:p-8 rounded-[2.5rem] border border-[var(--border)] shadow-md transition-colors duration-300">
         
-        {/* صورة المنتج المستعمل مع بادج الحالة */}
+        {/* صورة المنتج المستعمل مع بادج الحالة وتعديل الـ Image بـ fill و alt */}
         <div className="h-72 md:h-80 bg-[var(--background)] rounded-3xl flex items-center justify-center overflow-hidden relative border border-[var(--border)] shadow-inner">
           {product.image ? (
-            <img src={product.image} alt={displayTitle} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
+            <Image 
+              src={product.image} 
+              alt={displayTitle || 'صورة الجهاز المستعمل'} 
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-cover hover:scale-105 transition-transform duration-500" 
+            />
           ) : (
             <span className="text-8xl">📦</span>
           )}
           {condition && (
-            <span className="absolute top-4 right-4 bg-[var(--secondary)] text-white text-xs px-3.5 py-1.5 rounded-full font-bold shadow-md">
+            <span className="absolute top-4 right-4 bg-[var(--secondary)] text-white text-xs px-3.5 py-1.5 rounded-full font-bold shadow-md z-10">
               {dict.conditionLabel} {condition}
             </span>
           )}
@@ -139,9 +154,17 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
         {/* تفاصيل المنتج المستعمل */}
         <div className="space-y-5 flex flex-col justify-between">
           <div className="space-y-4">
-            <span className="inline-block bg-[var(--secondary)]/10 text-[var(--secondary)] text-xs px-3 py-1 rounded-full font-black">
-              منتج مستعمل
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="inline-block bg-[var(--secondary)]/10 text-[var(--secondary)] text-xs px-3 py-1 rounded-full font-black">
+                منتج مستعمل
+              </span>
+              {isOutOfStock && (
+                <span className="inline-block bg-red-500/10 text-red-600 text-xs px-3 py-1 rounded-full font-black">
+                  غير متاح حالياً
+                </span>
+              )}
+            </div>
+
             <h1 className="text-2xl md:text-3xl font-black text-[var(--foreground)]">{displayTitle}</h1>
             <p className="text-2xl text-[var(--secondary)] font-black">
               {product.price ? `${product.price} ج.م` : dict.callForPrice}
@@ -164,7 +187,15 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
           </div>
 
           <div className="space-y-4 pt-4 border-t border-[var(--border)]">
-            {!isAdded ? (
+            {isOutOfStock ? (
+              <button 
+                disabled
+                className="w-full bg-gray-300 dark:bg-zinc-800 text-gray-500 dark:text-zinc-500 py-4 rounded-2xl font-black cursor-not-allowed"
+                type="button"
+              >
+                {dict.outOfStock}
+              </button>
+            ) : !isAdded ? (
               <button 
                 onClick={handleAddToCart} 
                 className="w-full bg-[var(--secondary)] text-white py-4 rounded-2xl font-black transition-all hover:opacity-90 shadow-md cursor-pointer active:scale-95"
@@ -190,8 +221,12 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
                     </button>
                     <span className="font-black text-lg w-6 text-center text-[var(--foreground)]">{cartItemCount}</span>
                     <button 
-                      onClick={() => increaseQuantity(product.id, 'used')}
-                      className="w-8 h-8 bg-[var(--background)] border border-[var(--border)] rounded-xl font-bold text-[var(--secondary)] shadow-sm hover:opacity-80 flex items-center justify-center cursor-pointer"
+                      onClick={() => {
+                        if (cartItemCount < currentStock) {
+                          increaseQuantity(product.id, 'used');
+                        }
+                      }}
+                      className={`w-8 h-8 bg-[var(--background)] border border-[var(--border)] rounded-xl font-bold flex items-center justify-center shadow-sm ${cartItemCount >= currentStock ? 'opacity-40 cursor-not-allowed text-gray-400' : 'text-[var(--secondary)] hover:opacity-80 cursor-pointer'}`}
                       type="button"
                     >
                       +

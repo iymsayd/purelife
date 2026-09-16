@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import Image from 'next/image';
 import { getBlogPostBySlug, getRelatedArticles, getBlogs } from '@/app/blog/blogService';
 import Link from 'next/link';
 
@@ -57,8 +58,15 @@ export default async function BlogPostPage({ params }: PageProps) {
           {post.title}
         </h1>
         {post.image && (
-          <div className="w-full h-[350px] sm:h-[480px] rounded-3xl overflow-hidden shadow-2xl border border-secondary/20 bg-secondary/10">
-            <img src={post.image} alt={post.title} className="w-full h-full object-cover" />
+          <div className="w-full h-[350px] sm:h-[480px] rounded-3xl overflow-hidden shadow-2xl border border-secondary/20 bg-secondary/10 relative">
+            <Image 
+              src={post.image} 
+              alt={post.title || "صورة المقال الرئيسي"} 
+              fill
+              priority
+              sizes="(max-width: 1024px) 100vw, 1024px"
+              className="object-cover" 
+            />
           </div>
         )}
       </div>
@@ -100,7 +108,13 @@ export default async function BlogPostPage({ params }: PageProps) {
                 >
                   <div className="h-48 bg-secondary/10 overflow-hidden relative">
                     {related.image ? (
-                      <img src={related.image} alt={related.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                      <Image 
+                        src={related.image} 
+                        alt={related.title || "مقال مقترح"} 
+                        fill
+                        sizes="350px"
+                        className="object-cover group-hover:scale-105 transition-transform duration-500" 
+                      />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-3xl">📖</div>
                     )}

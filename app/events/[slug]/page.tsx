@@ -21,8 +21,8 @@ export async function generateMetadata({ params }: PageProps) {
   const { slug } = await params;
   const event: any = await getEventBySlug(slug);
 
-  return { 
-    title: event?.title ? `${event.title} | فعاليات بيورلايف` : "الحدث | بيورلايف", 
+  return {  
+    title: event?.title ? `${event.title} | فعاليات بيورلايف` : "الحدث | بيورلايف",  
     description: event?.desc || "تفاصيل الحدث وورش العمل",
     alternates: {
       canonical: `https://purelife-eg.com/events/${slug}`,

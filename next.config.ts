@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   // 2. إخفاء تسريب معلومات السيرفر (X-Powered-By)
   poweredByHeader: false,
 
-  // 3. إعدادات الصور وضبط الدومينات الخارجية (مثل Firebase Storage) لتحويلها لـ WebP
+  // 3. إعدادات الصور وضبط الدومينات الخارجية لتحويلها لـ WebP
   images: {
     remotePatterns: [
       {
@@ -21,6 +21,10 @@ const nextConfig: NextConfig = {
       {
         protocol: 'https',
         hostname: 'images.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'encrypted-tbn0.gstatic.com', // 👈 أضفنا الدومين بتاع صور جوجل هنا عشان الإيرور يختفي
       },
     ],
   },
@@ -41,7 +45,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: "Referrer-Policy",
-            value: "strict-origin-when-cross-origin",
+            value: "strict-origin-system-when-cross-origin",
           },
           {
             key: "Content-Security-Policy",
