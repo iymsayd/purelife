@@ -1,68 +1,33 @@
-"use client";
+import type { Metadata } from 'next';
+import ProfileClient from './ProfileClient';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
-import { ProfileSidebar } from '@/components/profile/ProfileSidebar';
-import { PersonalInfoForm } from '@/components/profile/PersonalInfoForm';
-import { SecurityForm } from '@/components/profile/SecurityForm';
-import { ActivitiesList } from '@/components/profile/ActivitiesList';
-import { OrdersList } from '@/components/profile/OrdersList';
+export async function generateMetadata(): Promise<Metadata> {
+  // عنوان افتراضي ثابت للصفحة الشخصية
+  const baseTitle = 'حسابي الشخصي';
+  const description = 'إدارة حسابك الشخصي، متابعة طلبات الشراء، وتحديث بيانات الأمان الخاصة بك في متجر بيورلايف.';
+
+  // التأكد من عدم تكرار اسم البراند لو تم تعديله مستقبلاً
+  const hasBrand = /بيورلايف|pure\s*life/i.test(baseTitle);
+  const finalTitle = hasBrand ? baseTitle : `${baseTitle} | بيورلايف`;
+
+  return {
+    title: finalTitle,
+    description: description,
+    robots: {
+      index: false, // صفحات الحساب الشخصي يفضل عدم أرشفته في جوجل حفاظاً على الخصوصية والأمان
+      follow: false,
+    },
+    openGraph: {
+      title: finalTitle,
+      description: description,
+      url: 'https://purelife-egypt.vercel.app/profile',
+      siteName: 'Pure Life Egypt',
+      locale: 'ar_EG',
+      type: 'website',
+    },
+  };
+}
 
 export default function ProfilePage() {
-  const router = useRouter();
-  const [activeTab, setActiveTab] = useState<'info' | 'security' | 'activities' | 'orders'>('info');
-  const [userData, setUserData] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (!user) {
-        router.replace('/login');
-      } else {
-        setUserData(user);
-        setLoading(false);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [router]);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background text-foreground">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-10 h-10 border-4 border-[#0ea5e9] border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-background text-foreground py-10 px-4 sm:px-6 lg:px-8" dir="rtl">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8 text-center">
-          <h1 className="text-3xl font-extrabold text-[#0ea5e9]">حسابي الشخصي</h1>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          <div className="lg:col-span-1">
-            <ProfileSidebar activeTab={activeTab} setActiveTab={setActiveTab} />
-          </div>
-
-          <div className="lg:col-span-3 space-y-6">
-            {userData && (
-              <>
-                {activeTab === 'info' && <PersonalInfoForm user={userData} />}
-                {activeTab === 'security' && <SecurityForm user={userData} />}
-                {activeTab === 'activities' && <ActivitiesList user={userData} />}
-                {activeTab === 'orders' && <OrdersList user={userData} />}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  return <ProfileClient />;
 }

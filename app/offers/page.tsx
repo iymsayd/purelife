@@ -19,7 +19,7 @@ export async function generateMetadata({ searchParams }: OffersPageProps): Promi
   const currentPage = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
 
   let headerData = {
-    title: "عروض بيورلايف الحصرية | Pure Life Offers",
+    title: "العروض",
     description: "استمتع بأفضل العروض والخصومات الحصرية على خدماتنا ومنقيات المياه."
   };
 

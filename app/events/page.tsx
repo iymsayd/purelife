@@ -19,7 +19,7 @@ export async function generateMetadata({ searchParams }: EventsPageProps): Promi
   const currentPage = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
 
   let headerData = {
-    title: "فعاليات بيورلايف | Pure Life Events",
+    title: "الفعاليات",
     description: "اطلع على أحدث ورش العمل والندوات وفعاليات الصيانة."
   };
 
