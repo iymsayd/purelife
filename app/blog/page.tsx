@@ -1,18 +1,40 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import type { Metadata } from 'next';
 import { BookOpen, ArrowUpRight, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getBlogs } from '@/app/blog/blogService';
 
 // تفعيل الكاش لـ Next.js مع إعادة التحديث كل ساعة (ISR) لضمان مجانية الفايربيز
 export const revalidate = 3600;
 
-export const metadata = {
-  title: "مدونة بيورلايف | أحدث النصائح والدراسات الفنية",
-  description: "أحدث النصائح والدراسات الفنية للصيانة ومياه الشرب من بيورلايف.",
-};
-
 interface BlogPageProps {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+// توليد الميتا داتا ديناميكياً لصفحة المدونة بناءً على الفئة ورقم الصفحة
+export async function generateMetadata({ searchParams }: BlogPageProps): Promise<Metadata> {
+  const resolvedSearchParams = await searchParams;
+  const category = typeof resolvedSearchParams.category === 'string' ? resolvedSearchParams.category : "الكل";
+  const page = typeof resolvedSearchParams.page === 'string' ? resolvedSearchParams.page : "1";
+
+  const title = category === "الكل" 
+    ? "مدونة بيورلايف | أحدث النصائح والدراسات الفنية" 
+    : `مقالات قسم ${category} | مدونة بيورلايف`;
+
+  const description = category === "الكل"
+    ? "أحدث النصائح والدراسات الفنية للصيانة ومياه الشرب من بيورلايف."
+    : `تصفح أحدث المقالات والدراسات الفنية في قسم ${category} للصيانة ومياه الشرب من بيورلايف - صفحة ${page}.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      locale: 'ar_EG',
+      type: 'website',
+    },
+  };
 }
 
 export default async function BlogPage({ searchParams }: BlogPageProps) {

@@ -72,6 +72,12 @@ const dict = {
 
 const CartContext = createContext<any>(null);
 
+// دالة مساعدة موحدة لمقارنة المنتجات بدقة منعاً لأي تضارب
+const isSameItem = (item: any, id: string, type?: string) => {
+  const itemType = item.type || (item.isUsed ? 'used' : undefined);
+  return String(item.id) === String(id) && (itemType === (type || undefined));
+};
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -87,20 +93,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error("Error loading cart from localStorage:", error);
     }
-
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === 'cart') {
-        try {
-          const newCart = event.newValue ? JSON.parse(event.newValue) : [];
-          setCartItems(newCart);
-        } catch (error) {
-          console.error("Error parsing cart from storage event:", error);
-        }
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const updateAndSaveCart = (newItems: any[]) => {
@@ -124,10 +116,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     const isUsedValue = itemType === 'used';
     const maxStock = Number(product.stock ?? product.quantity ?? 10);
 
-    const existingIndex = cartItems.findIndex(
-      item => String(item.id) === String(product.id) && 
-              ((item.type || (item.isUsed ? 'used' : undefined)) === (itemType || undefined))
-    );
+    const existingIndex = cartItems.findIndex(item => isSameItem(item, product.id, itemType));
     
     const currentQty = existingIndex > -1 ? cartItems[existingIndex].quantity : 0;
     const limit = Math.min(maxStock, 10);
@@ -157,7 +146,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const increaseQuantity = (id: string, type?: string) => {
-    const item = cartItems.find(i => String(i.id) === String(id) && ((i.type || (i.isUsed ? 'used' : undefined)) === (type || undefined)));
+    const item = cartItems.find(i => isSameItem(i, id, type));
     if (!item) return;
 
     const maxStock = Number(item.stock ?? 10);
@@ -169,24 +158,20 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
 
     const updated = cartItems.map(i => 
-      String(i.id) === String(id) && ((i.type || (i.isUsed ? 'used' : undefined)) === (type || undefined)) 
-        ? { ...i, quantity: i.quantity + 1 } 
-        : i
+      isSameItem(i, id, type) ? { ...i, quantity: i.quantity + 1 } : i
     );
     updateAndSaveCart(updated);
   };
 
   const decreaseQuantity = (id: string, type?: string) => {
     const updated = cartItems.map(i => 
-      String(i.id) === String(id) && ((i.type || (i.isUsed ? 'used' : undefined)) === (type || undefined)) 
-        ? { ...i, quantity: Math.max(1, i.quantity - 1) } 
-        : i
+      isSameItem(i, id, type) ? { ...i, quantity: Math.max(1, i.quantity - 1) } : i
     );
     updateAndSaveCart(updated);
   };
 
   const removeFromCart = (id: string, type?: string) => {
-    const updated = cartItems.filter(p => !(String(p.id) === String(id) && ((p.type || (p.isUsed ? 'used' : undefined)) === (type || undefined))));
+    const updated = cartItems.filter(p => !isSameItem(p, id, type));
     updateAndSaveCart(updated);
   };
 

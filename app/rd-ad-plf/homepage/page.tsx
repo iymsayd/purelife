@@ -4,7 +4,8 @@ import { db, auth } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
-import { Save, Trash2, Globe, CheckCircle, Loader2, Upload, Link as LinkIcon, Image as ImageIcon, Edit3, X, AlertTriangle } from 'lucide-react';
+import { Save, Trash2, Globe, CheckCircle, Loader2, Upload, Edit3, X, AlertTriangle, RefreshCw } from 'lucide-react';
+import Image from 'next/image';
 
 interface Brand {
   src: string;
@@ -35,8 +36,6 @@ export default function HomeSettingsDashboard() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
-  const [uploadingBrandIdx, setUploadingBrandIdx] = useState<number | null>(null);
-  const [brandInputType, setBrandInputType] = useState<'url' | 'file'>('url');
   
   const [newBrand, setNewBrand] = useState<Brand>({ src: '', alt: '' });
   const [editingBrandIndex, setEditingBrandIndex] = useState<number | null>(null);
@@ -127,7 +126,7 @@ export default function HomeSettingsDashboard() {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, isBrandEdit: boolean = false, brandIdx?: number) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -144,23 +143,27 @@ export default function HomeSettingsDashboard() {
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64String = reader.result as string;
-      if (isBrandEdit && brandIdx !== undefined) {
-        const updatedBrands = [...formData.brands];
-        updatedBrands[brandIdx].src = base64String;
-        setFormData({ ...formData, brands: updatedBrands });
-      } else {
-        setNewBrand(prev => ({ ...prev, src: base64String }));
-      }
+      setNewBrand(prev => ({ ...prev, src: base64String }));
     };
     reader.readAsDataURL(file);
   };
 
   const handleAddOrUpdateBrand = () => {
-    if (!newBrand.src || !newBrand.alt) {
+    if (!newBrand.alt.trim()) {
       setModal({
         isOpen: true,
         title: 'نقص في البيانات',
-        message: 'يرجى إدخال رابط أو رفع صورة الماركة مع كتابة اسمها.',
+        message: 'يرجى كتابة اسم الماركة بشكل صحيح.',
+        type: 'alert'
+      });
+      return;
+    }
+
+    if (!newBrand.src) {
+      setModal({
+        isOpen: true,
+        title: 'نقص في البيانات',
+        message: 'يرجى رفع صورة الماركة من الجهاز.',
         type: 'alert'
       });
       return;
@@ -344,7 +347,7 @@ export default function HomeSettingsDashboard() {
             </div>
 
             <div className="md:col-span-2">
-              <label className="block text-xs font-bold mb-2">الوصف التعريفي (سيتم تلوين جملة "أعلى مستوى من الخبرة والكفاءة" تلقائياً)</label>
+              <label className="block text-xs font-bold mb-2">الوصف التعريفي</label>
               <textarea 
                 rows={3}
                 value={formData.description}
@@ -371,60 +374,57 @@ export default function HomeSettingsDashboard() {
             <div className="p-4 rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/20 mb-6 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold">{editingBrandIndex !== null ? 'تعديل ماركة حالية' : 'إضافة ماركة جديدة'}</span>
-                <div className="flex items-center gap-1 bg-gray-200 dark:bg-gray-800 p-1 rounded-xl text-xs font-bold">
-                  <button
-                    type="button"
-                    onClick={() => setBrandInputType('url')}
-                    className={`px-3 py-1.5 rounded-lg transition-all ${brandInputType === 'url' ? 'bg-[var(--secondary)] text-white shadow-sm' : 'text-gray-500'}`}
-                  >
-                    رابط مباشر
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setBrandInputType('file')}
-                    className={`px-3 py-1.5 rounded-lg transition-all ${brandInputType === 'file' ? 'bg-[var(--secondary)] text-white shadow-sm' : 'text-gray-500'}`}
-                  >
-                    رفع من الجهاز
-                  </button>
-                </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
                 <div>
+                  <label className="block text-[10px] font-bold text-gray-500 mb-1">اسم الماركة</label>
                   <input 
                     type="text" 
                     value={newBrand.alt || ''}
                     onChange={(e) => setNewBrand({ ...newBrand, alt: e.target.value })}
-                    placeholder="اسم الماركة (مثال: Carrier)"
+                    placeholder="مثال: Carrier"
                     className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-[var(--background)] text-xs outline-none focus:ring-2 focus:ring-[var(--secondary)]"
                   />
                 </div>
 
                 <div className="md:col-span-1">
-                  {brandInputType === 'url' ? (
-                    <input 
-                      type="text" 
-                      value={newBrand.src || ''}
-                      onChange={(e) => setNewBrand({ ...newBrand, src: e.target.value })}
-                      placeholder="رابط صورة الماركة URL"
-                      className="w-full p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-[var(--background)] text-xs outline-none focus:ring-2 focus:ring-[var(--secondary)]"
-                    />
+                  <label className="block text-[10px] font-bold text-gray-500 mb-1">صورة الماركة</label>
+                  
+                  {/* صندوق رفع أو استبدال الصورة بشكل تفاعلي */}
+                  {newBrand.src ? (
+                    <div className="flex items-center gap-3 p-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-[var(--background)]">
+                      <div className="relative w-10 h-10 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-white flex-shrink-0">
+                        <Image src={newBrand.src} alt="Preview" fill className="object-contain p-1" />
+                      </div>
+                      <div className="flex items-center gap-2 flex-grow justify-end">
+                        <label className="px-3 py-1.5 bg-sky-500/10 text-sky-500 hover:bg-sky-500/20 rounded-lg text-[11px] font-bold cursor-pointer transition-colors flex items-center gap-1">
+                          <RefreshCw size={12} /> استبدال
+                          <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                        </label>
+                        <button 
+                          type="button"
+                          onClick={() => setNewBrand({ ...newBrand, src: '' })}
+                          className="p-1.5 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 rounded-lg transition-colors cursor-pointer"
+                          title="حذف الصورة"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
                   ) : (
                     <div className="flex items-center gap-2">
                       <input 
                         type="file" 
                         accept="image/*"
-                        onChange={(e) => handleFileUpload(e, false)}
+                        onChange={handleFileUpload}
                         className="w-full p-2 rounded-xl border border-gray-200 dark:border-gray-800 bg-[var(--background)] text-xs outline-none file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-[var(--secondary)]/10 file:text-[var(--secondary)] cursor-pointer"
                       />
-                      {newBrand.src && (
-                        <span className="text-[10px] text-emerald-500 font-bold whitespace-nowrap">تم الرفع ✓</span>
-                      )}
                     </div>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 pt-5">
                   <button 
                     type="button"
                     onClick={handleAddOrUpdateBrand}
@@ -451,8 +451,14 @@ export default function HomeSettingsDashboard() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {formData.brands.map((brand, idx) => (
                 <div key={idx} className="p-3 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50/30 dark:bg-gray-900/10 flex flex-col items-center justify-between gap-2 relative group">
-                  <div className="h-12 w-full flex items-center justify-center bg-white dark:bg-gray-900 rounded-lg p-1 border border-gray-100 dark:border-gray-800">
-                    <img src={brand.src} alt={brand.alt} className="max-h-10 max-w-full object-contain" />
+                  <div className="h-16 w-full relative flex items-center justify-center bg-white dark:bg-gray-900 rounded-lg p-1 border border-gray-100 dark:border-gray-800 overflow-hidden">
+                    <Image 
+                      src={brand.src} 
+                      alt={brand.alt || 'Brand'} 
+                      fill 
+                      sizes="(max-width: 768px) 100vw, 25vw"
+                      className="object-contain p-1" 
+                    />
                   </div>
                   <span className="text-xs font-bold">{brand.alt}</span>
                   <div className="flex items-center gap-1">

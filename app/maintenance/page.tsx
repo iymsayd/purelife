@@ -11,7 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
     if (docSnap.exists()) {
       const data = docSnap.data();
       return {
-        title: data.metaTitle || 'طلب صيانة | بيورلايف',
+        title: data.metaTitle || 'طلب صيانة',
         description: data.metaDescription || 'اطلب صيانة فلاتر المياه أو التكييفات وسيقوم فريقنا بالتواصل معك في أسرع وقت.',
       };
     }
@@ -20,7 +20,7 @@ export async function generateMetadata(): Promise<Metadata> {
   }
 
   return {
-    title: 'طلب صيانة | بيورلايف',
+    title: 'طلب صيانة',
     description: 'اطلب صيانة فلاتر المياه أو التكييفات وسيقوم فريقنا بالتواصل معك في أسرع وقت.',
   };
 }

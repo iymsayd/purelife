@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { ShieldCheck, ShoppingBag, ChevronRight, ChevronLeft } from 'lucide-react';
 import ProductCard from '@/components/layout/ProductCard';
 import FilterSidebar from './FilterSidebar';
@@ -8,7 +9,7 @@ import CartComponent from '@/components/layout/CartComponent';
 import { useCart } from '@/app/context/CartContext';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 
-export default function UsedProductListClient({ 
+export default function ProductListClient({ 
   initialProducts = [], 
   searchParams 
 }: { 
@@ -19,6 +20,11 @@ export default function UsedProductListClient({
   const clientSearchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const getParam = (key: string) => {
     const val = clientSearchParams?.get(key) || searchParams?.[key];
@@ -36,13 +42,11 @@ export default function UsedProductListClient({
   const priceSort = getParam('priceSort');
   const ratingSort = getParam('ratingSort');
 
-  // استخراج ورقم الصفحة الحالية من الـ SearchParams
   const pageParam = clientSearchParams?.get('page') || searchParams?.page;
   const parsedPage = typeof pageParam === 'string' ? parseInt(pageParam, 10) : 1;
   const currentPage = isNaN(parsedPage) || parsedPage < 1 ? 1 : parsedPage;
   const pageSize = 10;
 
-  // فلترة المنتجات المستعملة مع معالجة آمنة للبيانات
   let filtered = [...initialProducts].filter(p => {
     const pTitle = p.nameAr || p.title || '';
     const pCategory = p.categoryAr || p.category || '';
@@ -72,7 +76,6 @@ export default function UsedProductListClient({
     );
   });
 
-  // ترتيب المنتجات المستعملة
   filtered.sort((a: any, b: any) => {
     const priceA = Number(a.price) || 0;
     const priceB = Number(b.price) || 0;
@@ -86,7 +89,6 @@ export default function UsedProductListClient({
     return 0;
   });
 
-  // حسابات التقسيم (Pagination)
   const totalProducts = filtered.length;
   const totalPages = Math.ceil(totalProducts / pageSize);
   const validCurrentPage = Math.min(currentPage, totalPages > 0 ? totalPages : 1);
@@ -94,7 +96,6 @@ export default function UsedProductListClient({
   const startIndex = (validCurrentPage - 1) * pageSize;
   const currentProducts = filtered.slice(startIndex, startIndex + pageSize);
 
-  // دالة لتغيير الصفحة مع الحفاظ على الفلاتر الأخرى
   const createPageUrl = (pageNumber: number) => {
     const params = new URLSearchParams(clientSearchParams?.toString() || '');
     if (pageNumber === 1) {
@@ -104,6 +105,15 @@ export default function UsedProductListClient({
     }
     return `${pathname}?${params.toString()}`;
   };
+
+  // حماية ضد اختلاف الهيدريشن بين السيرفر والكلينت (مطابق للجديد تماماً)
+  if (!mounted) {
+    return (
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16 max-w-7xl" dir="rtl">
+        <div className="animate-pulse h-[600px] w-full bg-secondary/10 rounded-[2.5rem]"></div>
+      </main>
+    );
+  }
 
   return (
     <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16 max-w-7xl transition-colors duration-300" dir="rtl">
@@ -125,10 +135,9 @@ export default function UsedProductListClient({
         <SearchComponent products={initialProducts} />
       </div>
 
-      {/* تخطيط الصفحة: السلة والفلتر تظهر في الأعلى (order-1) على الموبايل، وتعود للجانب (order-2) في الشاشات الكبيرة */}
+      {/* تخطيط الصفحة */}
       <div className="flex flex-col lg:flex-row gap-8 items-start">
         
-        {/* قسم الفلتر والسلة الجانبي */}
         <aside className="w-full lg:w-80 space-y-6 shrink-0 order-1 lg:order-2">
           <div className="lg:sticky lg:top-24 space-y-6">
             <CartComponent />
@@ -136,7 +145,6 @@ export default function UsedProductListClient({
           </div>
         </aside>
 
-        {/* قسم عرض المنتجات المستعملة */}
         <section className="flex-1 w-full min-w-0 order-2 lg:order-1">
           <div className="flex items-center justify-between mb-6 px-2">
             <h2 className="text-xl sm:text-2xl font-black text-[var(--secondary)] flex items-center gap-2">
@@ -162,10 +170,8 @@ export default function UsedProductListClient({
                 ))}
               </div>
 
-              {/* نظام التقسيم (Pagination) */}
               {totalPages > 1 && (
                 <nav className="flex flex-wrap items-center justify-center gap-2 pt-12 pb-4" aria-label="Pagination">
-                  {/* زر السابق */}
                   {validCurrentPage > 1 ? (
                     <button
                       onClick={() => router.push(createPageUrl(validCurrentPage - 1))}
@@ -181,7 +187,6 @@ export default function UsedProductListClient({
                     </span>
                   )}
 
-                  {/* أرقام الصفحات */}
                   <div className="flex flex-wrap items-center gap-1.5">
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNumber) => {
                       const isActive = pageNumber === validCurrentPage;
@@ -201,7 +206,6 @@ export default function UsedProductListClient({
                     })}
                   </div>
 
-                  {/* زر التالي */}
                   {validCurrentPage < totalPages ? (
                     <button
                       onClick={() => router.push(createPageUrl(validCurrentPage + 1))}

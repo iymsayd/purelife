@@ -12,12 +12,17 @@ import { ShieldCheck, MapPin, Phone, User as UserIcon, Mail, ShoppingBag, ArrowR
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { cartItems, totalAmount, clearCart, isMounted: isCartMounted } = useCart() as {
+  const cartContext = useCart() as {
     cartItems: any[];
     totalAmount: number;
     clearCart: () => void;
     isMounted: boolean;
   };
+
+  const cartItems = cartContext?.cartItems || [];
+  const totalAmount = cartContext?.totalAmount || 0;
+  const clearCart = cartContext?.clearCart || (() => {});
+  const isCartMounted = cartContext?.isMounted || false;
 
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -33,11 +38,10 @@ export default function CheckoutPage() {
   const [governorate, setGovernorate] = useState('');
   const [country, setCountry] = useState('مصر');
 
-  // حالات أخطاء التحقق (Validation & Anti-Spam Errors)
+  // حالات أخطاء التحقق
   const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({});
   const [lastSubmitTime, setLastSubmitTime] = useState<number>(0);
 
-  // تفعيل زر Esc لإغلاق النافذة المنبثقة للـ Auth
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -48,7 +52,6 @@ export default function CheckoutPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // التحقق من حالة تسجيل الدخول وجلب البيانات الفعلية
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (!currentUser) {
@@ -84,51 +87,44 @@ export default function CheckoutPage() {
     return () => unsubscribe();
   }, []);
 
-  // حماية إضافية: لو السلة فارغة بعد التحميل، نوجهه للمتجر فوراً
   useEffect(() => {
     if (isCartMounted && cartItems.length === 0 && !success) {
       router.replace('/#products');
     }
   }, [isCartMounted, cartItems, success, router]);
 
-  // منع أي ريندر وهمي أو مشكلة هيدريشن قبل اكتمال التحميل
+  // حماية الهيدريشن: عرض شاشة تحميل متطابقة تماماً لبيئة السيرفر والكلينت
   if (!isCartMounted || authLoading) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center bg-background text-foreground">
+      <main className="min-h-[70vh] flex items-center justify-center bg-background text-foreground" dir="rtl">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500"></div>
-      </div>
+      </main>
     );
   }
 
-  // دالة لجلب اسم المنتج بمرونة
   const getLocalizedItemTitle = (item: any) => {
     return item.titleAr || item.nameAr || item.title || item.name || 'منتج بدون اسم';
   };
 
-  // دالة تنظيف المدخلات لحماية البيانات ضد الـ Spam وحقن الكود (Sanitization)
   const sanitizeInput = (input: string) => {
     return input.replace(/<[^>]*>?/gm, '').trim();
   };
 
-  // دالة التحقق من صحة الفورم (Form Validation) بالنص المطلوب تماماً
   const validateForm = () => {
     const errors: { [key: string]: string } = {};
     const cleanName = sanitizeInput(name);
     const cleanPhone = sanitizeInput(phone);
     const cleanAddress = sanitizeInput(address);
 
-    // التحقق من الاسم (ألا يقل عن 3 أحرف أو يحتوي على رموز خبيثة)
     if (!cleanName || cleanName.length < 3 || /[<>/\\]/.test(name)) {
       errors.name = 'الاسم يجب ألا يقل عن 3 أحرف.';
     }
 
-    // التحقق من رقم الهاتف المصري (يبدأ بـ 01 ويحتوي على 11 رقماً صحيحاً)
     const egyptianPhoneRegex = /^01[0125][0-9]{8}$/;
     if (!cleanPhone || !egyptianPhoneRegex.test(cleanPhone)) {
-      errors.phone = 'رقم الهاتف غير صحيح (يجب ألا يقل عن 10 أرقام).';
+      errors.phone = 'رقم الهاتف غير صحيح (يجب أن يكون رقم مصري صحيح 11 رقماً).';
     }
 
-    // التحقق من العنوان بالتفصيل
     if (!cleanAddress || cleanAddress.length < 5) {
       errors.address = 'يرجى كتابة العنوان بشكل مفصل وصحيح.';
     }
@@ -137,14 +133,12 @@ export default function CheckoutPage() {
     return Object.keys(errors).length === 0;
   };
 
-  // إرسال الطلب وتحديث بيانات اليوزر الفعلية والتحقق من المخزون وإرساله لجوجل شيت عبر messageService
   const handleSubmitOrder = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // 1. فحص منع السبام (Rate Limiting محلي لمنع الضغط المتكرر في أقل من 5 ثواني)
     const now = Date.now();
     if (now - lastSubmitTime < 5000) {
-      alert("برجاء الانتظار قليلاً قبل إعادة إرسال الطلب لمنع التكرار (Spam Protection).");
+      alert("برجاء الانتظار قليلاً قبل إعادة إرسال الطلب لمنع التكرار.");
       return;
     }
 
@@ -154,10 +148,7 @@ export default function CheckoutPage() {
       return;
     }
 
-    // 2. تفعيل الفاليديشن
-    if (!validateForm()) {
-      return;
-    }
+    if (!validateForm()) return;
 
     if (cartItems.length === 0) {
       alert("سلة المشتريات فارغة!");
@@ -165,7 +156,6 @@ export default function CheckoutPage() {
       return;
     }
 
-    // التحقق من توفر المخزون لكل منتج في السلة قبل إتمام الطلب
     for (const item of cartItems) {
       const stock = Number(item.stock ?? item.quantity ?? 999);
       const requestedQty = Number(item.quantity ?? 1);
@@ -183,7 +173,6 @@ export default function CheckoutPage() {
       const cleanPhone = sanitizeInput(phone);
       const cleanAddress = sanitizeInput(address);
 
-      // 3. تحديث بيانات اليوزر في الداتا بأمان
       const userDocRef = doc(db, 'users', user.uid);
       await updateDoc(userDocRef, {
         name: cleanName,
@@ -194,7 +183,6 @@ export default function CheckoutPage() {
         updatedAt: serverTimestamp(),
       });
 
-      // 4. تجهيز عناصر الطلب وتحديث الـ Stock في قاعدة البيانات إن أمكن
       const formattedItems = cartItems.map((item) => ({
         id: item.id || '',
         title: getLocalizedItemTitle(item),
@@ -204,7 +192,6 @@ export default function CheckoutPage() {
         image: item.image || '',
       }));
 
-      // تحديث مخزون المنتجات في قاعدة البيانات إن وُجدت كولكشن للمنتجات
       for (const item of cartItems) {
         if (item.id) {
           try {
@@ -220,17 +207,15 @@ export default function CheckoutPage() {
               });
             }
           } catch (stockErr) {
-            console.error("Error updating product stock in database:", stockErr);
+            console.error("Error updating product stock:", stockErr);
           }
         }
       }
 
-      // نص منسق تفصيلي للمنتجات ليظهر بشكل احترافي في الشيت والرسائل
       const itemsSummaryText = formattedItems
         .map(item => `- ${item.title} (الكمية: ${item.quantity} | السعر: ${item.price} ج.م | النوع: ${item.type})`)
         .join(' | ');
 
-      // 5. إرسال الطلب عبر دالة saveUserMessage الموحدة (لتحفظ بـ فايربيس وترسل لجوجل شيت تلقائياً)
       await saveUserMessage('orders', {
         userId: user.uid,
         name: cleanName,
@@ -262,12 +247,11 @@ export default function CheckoutPage() {
     }
   };
 
-  // شاشة نافذة تسجيل الدخول لو المستخدم مش مسجل
   if (!user) {
     return (
       <main className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 relative" dir="rtl">
         <div className="absolute inset-0 bg-background/80 backdrop-blur-md z-10 flex items-center justify-center p-4">
-          <div className="bg-background text-foreground rounded-3xl shadow-2xl max-w-md w-full p-6 md:p-8 relative border border-border text-center animate-in fade-in zoom-in duration-300">
+          <div className="bg-background text-foreground rounded-3xl shadow-2xl max-w-md w-full p-6 md:p-8 relative border border-border text-center">
             <button 
               onClick={() => router.push('/')}
               className="absolute top-4 start-4 text-foreground/60 hover:text-foreground bg-secondary/10 hover:bg-secondary/20 p-2 rounded-full transition-all cursor-pointer"
@@ -275,7 +259,7 @@ export default function CheckoutPage() {
               <X size={18} />
             </button>
 
-            <div className="w-16 h-16 bg-gradient-to-tr from-sky-500/20 to-indigo-500/20 text-sky-500 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-sky-500/30 shadow-inner">
+            <div className="w-16 h-16 bg-gradient-to-tr from-sky-500/20 to-indigo-500/20 text-sky-500 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-sky-500/30">
               <UserIcon size={32} />
             </div>
 
@@ -287,7 +271,7 @@ export default function CheckoutPage() {
             <div className="space-y-3">
               <button 
                 onClick={() => router.push('/login')}
-                className="w-full bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-bold py-3.5 px-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full bg-gradient-to-r from-sky-500 to-indigo-600 text-white font-bold py-3.5 px-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
               >
                 <LogIn size={18} />
                 <span>تسجيل الدخول</span>
@@ -307,18 +291,18 @@ export default function CheckoutPage() {
               >
                 العودة للرئيسية
               </button>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
-    </main>
-  );
-}
+      </main>
+    );
+  }
 
   if (success) {
     return (
-      <div className="min-h-[70vh] flex items-center justify-center px-4 bg-background" dir="rtl">
-        <div className="bg-background text-foreground p-8 rounded-3xl shadow-2xl max-w-md w-full text-center border border-emerald-500/30 animate-in fade-in zoom-in duration-300">
-          <div className="w-16 h-16 bg-emerald-500/15 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/30 shadow-inner">
+      <div className="min-h-[70vh] flex items-center justify-center px-4 bg-background text-foreground" dir="rtl">
+        <div className="bg-background text-foreground p-8 rounded-3xl shadow-2xl max-w-md w-full text-center border border-emerald-500/30">
+          <div className="w-16 h-16 bg-emerald-500/15 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-4 border border-emerald-500/30">
             <CheckCircle2 size={36} />
           </div>
           <h2 className="text-2xl font-black text-foreground mb-2">تم إتمام طلبك بنجاح!</h2>
@@ -345,8 +329,7 @@ export default function CheckoutPage() {
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* نموذج البيانات والشحن */}
-          <div className="lg:col-span-7 bg-background text-foreground rounded-3xl shadow-xl border border-border/70 p-6 md:p-8 backdrop-blur-md">
+          <div className="lg:col-span-7 bg-background text-foreground rounded-3xl shadow-xl border border-border/70 p-6 md:p-8">
             <h2 className="text-lg font-black mb-1 flex items-center gap-2">
               <MapPin size={20} className="text-sky-500" />
               بيانات الشحن والاستلام
@@ -376,7 +359,7 @@ export default function CheckoutPage() {
                       setName(e.target.value);
                       if (formErrors.name) setFormErrors({ ...formErrors, name: '' });
                     }}
-                    className={`w-full pr-11 pl-4 py-3 rounded-2xl border bg-secondary/5 text-foreground focus:ring-2 text-sm outline-none transition-all shadow-xs ${
+                    className={`w-full pr-11 pl-4 py-3 rounded-2xl border bg-secondary/5 text-foreground focus:ring-2 text-sm outline-none transition-all ${
                       formErrors.name ? 'border-red-500 focus:ring-red-500/50' : 'border-border/80 focus:ring-sky-500/50 focus:border-sky-500'
                     }`}
                     placeholder="ادخل اسمك الكامل"
@@ -413,7 +396,7 @@ export default function CheckoutPage() {
                       setPhone(e.target.value);
                       if (formErrors.phone) setFormErrors({ ...formErrors, phone: '' });
                     }}
-                    className={`w-full pr-11 pl-4 py-3 rounded-2xl border bg-secondary/5 text-foreground focus:ring-2 text-sm outline-none transition-all shadow-xs ${
+                    className={`w-full pr-11 pl-4 py-3 rounded-2xl border bg-secondary/5 text-foreground focus:ring-2 text-sm outline-none transition-all ${
                       formErrors.phone ? 'border-red-500 focus:ring-red-500/50' : 'border-border/80 focus:ring-sky-500/50 focus:border-sky-500'
                     }`}
                     placeholder="01xxxxxxxxx"
@@ -463,7 +446,7 @@ export default function CheckoutPage() {
                     setAddress(e.target.value);
                     if (formErrors.address) setFormErrors({ ...formErrors, address: '' });
                   }}
-                  className={`w-full px-4 py-3 rounded-2xl border bg-secondary/5 text-foreground focus:ring-2 text-sm outline-none transition-all resize-none shadow-xs ${
+                  className={`w-full px-4 py-3 rounded-2xl border bg-secondary/5 text-foreground focus:ring-2 text-sm outline-none transition-all resize-none ${
                     formErrors.address ? 'border-red-500 focus:ring-red-500/50' : 'border-border/80 focus:ring-sky-500/50 focus:border-sky-500'
                   }`}
                   placeholder="الشارع، رقم الحارة، العلامة المميزة..."
@@ -474,7 +457,7 @@ export default function CheckoutPage() {
               <button
                 type="submit"
                 disabled={submitting || cartItems.length === 0}
-                className="w-full mt-6 bg-gradient-to-r from-sky-500 via-indigo-600 to-indigo-700 hover:from-sky-600 hover:to-indigo-800 text-white font-black py-4 px-6 rounded-2xl transition-all shadow-lg hover:shadow-sky-500/25 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full mt-6 bg-gradient-to-r from-sky-500 via-indigo-600 to-indigo-700 hover:from-sky-600 hover:to-indigo-800 text-white font-black py-4 px-6 rounded-2xl transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {submitting ? (
                   <span className="flex items-center gap-2">
@@ -491,8 +474,7 @@ export default function CheckoutPage() {
             </form>
           </div>
 
-          {/* ملخص الطلب والأسعار */}
-          <div className="lg:col-span-5 bg-background text-foreground rounded-3xl shadow-xl border border-border/70 p-6 h-fit backdrop-blur-md">
+          <div className="lg:col-span-5 bg-background text-foreground rounded-3xl shadow-xl border border-border/70 p-6 h-fit">
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-border">
               <h3 className="text-lg font-black text-foreground">
                 ملخص الطلب
@@ -557,17 +539,17 @@ export default function CheckoutPage() {
                 <span>الإجمالي الكلي</span>
                 <span className="text-sky-500 text-lg sm:text-xl font-black whitespace-nowrap">{totalAmount} ج.م</span>
               </div>
-         </div>
+            </div>
 
-         <div className="mt-6 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-purple-500/10 p-4 rounded-2xl border border-sky-500/20 flex items-start gap-3 shadow-inner">
-            <ShieldCheck className="text-sky-500 shrink-0 mt-0.5" size={20} />
-            <p className="text-xs text-foreground/80 leading-relaxed">
-              ضمان حقيقي ودعم فني متواصل لجميع منتجات معالجة المياه والتكييفات والمنتجات المستعملة والجديدة.
-            </p>
+            <div className="mt-6 bg-gradient-to-r from-sky-500/10 via-indigo-500/10 to-purple-500/10 p-4 rounded-2xl border border-sky-500/20 flex items-start gap-3">
+              <ShieldCheck className="text-sky-500 shrink-0 mt-0.5" size={20} />
+              <p className="text-xs text-foreground/80 leading-relaxed">
+                ضمان حقيقي ودعم فني متواصل لجميع منتجات معالجة المياه والتكييفات والمنتجات المستعملة والجديدة.
+              </p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </main>
+    </main>
   );
 }

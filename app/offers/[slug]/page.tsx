@@ -27,6 +27,28 @@ export async function generateMetadata({ params }: PageProps) {
     alternates: {
       canonical: `https://purelife-eg.com/offers/${slug}`,
     },
+    openGraph: {
+      title: offer?.title ? `${offer.title} | عروض بيورلايف` : "العرض | بيورلايف",
+      description: offer?.desc || "استمتع بأفضل العروض والخصومات الحصرية من بيورلايف.",
+      url: `https://purelife-eg.com/offers/${slug}`,
+      siteName: 'بيورلايف',
+      images: [
+        {
+          url: offer?.imageUrl || offer?.image || 'https://purelife-eg.com/og-image.jpg',
+          width: 1200,
+          height: 630,
+          alt: offer?.title || 'عروض بيورلايف',
+        },
+      ],
+      locale: 'ar_AR',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: offer?.title ? `${offer.title} | عروض بيورلايف` : "العرض | بيورلايف",
+      description: offer?.desc || "استمتع بأفضل العروض والخصومات الحصرية من بيورلايف.",
+      images: [offer?.imageUrl || offer?.image || 'https://purelife-eg.com/og-image.jpg'],
+    },
   };
 }
 

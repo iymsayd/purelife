@@ -1,14 +1,23 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import type { Metadata } from 'next';
 import { Sparkles, ArrowUpRight, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getOffers } from './offerService';
 import { db } from '@/lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 
-// تفعيل الكاش لـ Next.js مع إعادة التحديث كل ساعة (ISR)
+// تفعيل الكاش لـ Next.js مع إعادة التحديث كل ساعة (ISR) لضمان مجانية الفايربيز
 export const revalidate = 3600;
 
-export async function generateMetadata() {
+interface OffersPageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export async function generateMetadata({ searchParams }: OffersPageProps): Promise<Metadata> {
+  const resolvedSearchParams = await searchParams;
+  const pageParam = typeof resolvedSearchParams.page === 'string' ? parseInt(resolvedSearchParams.page, 10) : 1;
+  const currentPage = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
+
   let headerData = {
     title: "عروض بيورلايف الحصرية | Pure Life Offers",
     description: "استمتع بأفضل العروض والخصومات الحصرية على خدماتنا ومنقيات المياه."
@@ -25,26 +34,27 @@ export async function generateMetadata() {
     console.error("Error fetching metadata:", e);
   }
 
+  const title = currentPage > 1 ? `${headerData.title} - صفحة ${currentPage}` : headerData.title;
+  const description = currentPage > 1 
+    ? `${headerData.description} - صفحة رقم ${currentPage}.` 
+    : headerData.description;
+
   return {
-    title: headerData.title,
-    description: headerData.description,
+    title,
+    description,
     keywords: ["عروض تنقية المياه", "خصومات فلتر ماء", "عروض بيورلايف طنطا", "Pure Life Offers"],
     alternates: {
-      canonical: 'https://purelife-eg.com/offers',
+      canonical: currentPage > 1 ? `https://purelife-egypt.vercel.app/offers?page=${currentPage}` : 'https://purelife-egypt.vercel.app/offers',
     },
     openGraph: {
-      title: headerData.title,
-      description: headerData.description,
-      url: 'https://purelife-eg.com/offers',
+      title,
+      description,
+      url: 'https://purelife-egypt.vercel.app/offers',
       siteName: 'Pure Life Egypt',
       locale: 'ar_EG',
       type: 'website',
     },
   };
-}
-
-interface OffersPageProps {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function OffersPage({ searchParams }: OffersPageProps) {
@@ -119,6 +129,7 @@ export default async function OffersPage({ searchParams }: OffersPageProps) {
                           src={offer.image} 
                           alt={displayTitle} 
                           fill 
+                          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
                           className="object-cover group-hover:scale-110 transition-transform duration-700" 
                         />
                       ) : (

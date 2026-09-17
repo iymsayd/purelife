@@ -15,12 +15,21 @@ async function getProductData(identifier: string) {
   const cleanId = identifier ? decodeURIComponent(identifier).trim() : '';
   if (!cleanId) return null;
 
-  // البحث في الـ collections الخاصة بالمنتجات المستعملة
   for (const colName of ['used-products', 'used_products']) {
-    const docRef = doc(db, colName, cleanId);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() };
+    try {
+      const docRef = doc(db, colName, cleanId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        return { 
+          id: docSnap.id, 
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (typeof data.createdAt === 'string' ? data.createdAt : null),
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : (typeof data.updatedAt === 'string' ? data.updatedAt : null),
+        };
+      }
+    } catch (e) {
+      console.error(e);
     }
   }
 
@@ -30,7 +39,13 @@ async function getProductData(identifier: string) {
       const querySnapshot = await getDocs(q);
       if (!querySnapshot.empty) {
         const foundDoc = querySnapshot.docs[0];
-        return { id: foundDoc.id, ...foundDoc.data() };
+        const data = foundDoc.data();
+        return { 
+          id: foundDoc.id, 
+          ...data,
+          createdAt: data.createdAt?.toDate ? data.createdAt.toDate().toISOString() : (typeof data.createdAt === 'string' ? data.createdAt : null),
+          updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate().toISOString() : (typeof data.updatedAt === 'string' ? data.updatedAt : null),
+        };
       }
     } catch (e) {
       console.error(e);
@@ -49,15 +64,36 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 
   const title = rawData.nameAr || rawData.titleAr || rawData.title || '';
-  const desc = rawData.descriptionAr || rawData.descAr || rawData.description || rawData.desc || '';
+  const desc = rawData.descriptionAr || rawData.descAr || rawData.description || rawData.desc || 'تصفح عروض الأجهزة المستعملة بحالة ممتازة وبأسعار اقتصادية.';
+  const productImage = rawData.image || rawData.imageUrl || 'https://purelife-eg.com/og-image.jpg';
 
   return {
-    title: `${title} (مستعمل) | متجر فلاتر المياه`,
-    description: desc || 'تصفح عروض الأجهزة المستعملة بحالة ممتازة وبأسعار اقتصادية.',
+    title: `${title} (مستعمل) | بيورلايف`,
+    description: desc,
+    alternates: {
+      canonical: `https://purelife-eg.com/used-products/${slug}`,
+    },
     openGraph: {
-      title: `${title} (مستعمل)`,
+      title: `${title} (مستعمل) | بيورلايف`,
       description: desc,
-      images: rawData.image ? [{ url: rawData.image }] : [],
+      url: `https://purelife-eg.com/used-products/${slug}`,
+      siteName: 'بيورلايف',
+      images: [
+        {
+          url: productImage,
+          width: 1200,
+          height: 630,
+          alt: `${title} (مستعمل)`,
+        },
+      ],
+      locale: 'ar_AR',
+      type: 'website',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${title} (مستعمل) | بيورلايف`,
+      description: desc,
+      images: [productImage],
     },
   };
 }
@@ -68,7 +104,7 @@ export default async function UsedProductPage({ params }: Props) {
 
   if (!rawData) {
     return (
-      <div className="p-20 text-center bg-[var(--background)] text-[var(--foreground)] text-lg font-bold min-h-screen flex items-center justify-center" dir="rtl">
+      <div className="p-20 text-center bg-background text-foreground text-lg font-bold min-h-screen flex items-center justify-center" dir="rtl">
         المنتج المستعمل غير موجود.
       </div>
     );
@@ -76,13 +112,11 @@ export default async function UsedProductPage({ params }: Props) {
 
   const product = {
     ...rawData,
-    // ضبط المخزون بـ 99 افتراضياً لو الحقل مش موجود، مع الحفاظ على القيمة الحقيقية لو متوفرة
     stock: typeof rawData.stock === 'number' ? rawData.stock : 99,
-    createdAt: rawData.createdAt?.toDate ? rawData.createdAt.toDate().toISOString() : null,
   };
 
   return (
-    <div className="bg-[var(--background)] text-[var(--foreground)] min-h-screen transition-colors duration-300" dir="rtl">
+    <div className="bg-background text-foreground min-h-screen transition-colors duration-300" dir="rtl">
       <div className="container mx-auto px-4 py-8 lg:py-12 max-w-7xl">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           <div className="lg:col-span-8">

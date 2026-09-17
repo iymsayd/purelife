@@ -155,7 +155,6 @@ export default function Header() {
             </button>
           </div>
 
-          {/* تم تعديل المحاذاة بـ px خفيفة لتكون مسحوبة للداخل ومطابقة لعرض الـ Navigation */}
           <div className="flex flex-col md:flex-row items-center justify-between w-full px-2 md:px-4">
             
             {/* 1. اللوجو على اليمين مع مسافة داخلية مريحة */}
@@ -174,7 +173,7 @@ export default function Header() {
               </Link>
             </div>
 
-            {/* 2. أزرار الحسابات وتسجيل الدخول على اليسار بمسافة داخلية متوازنة */}
+            {/* 2. أزرار الحسابات وتسجيل الدخول على اليسار */}
             <div className="flex items-center justify-center gap-2 order-3 mt-2 md:mt-0">
               {isMounted && user ? (
                 <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-800/80 px-2.5 py-1 rounded-full border border-gray-200 dark:border-gray-700 text-xs shadow-xs">

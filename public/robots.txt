@@ -1,0 +1,9 @@
+# السماح لكل محركات البحث ووكلاء الذكاء الاصطناعي بزيارة الموقع
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /checkout/
+Disallow: /cart/
+
+# خريطة الموقع
+Sitemap: https://purelife-egypt.vercel.app/sitemap.xml

@@ -59,7 +59,6 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
   const displayDesc = product.descriptionAr || product.descAr || product.description || '';
   const imageAlt = displayTitle || product.name || product.title || "صورة المنتج";
   
-  // التحقق من المخزون (لو مش موجود بيتاخد افتراضي 99)
   const currentStock = typeof product.stock === 'number' ? product.stock : 99;
   const isOutOfStock = currentStock <= 0;
   
@@ -99,12 +98,19 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
   const isAdded = !!cartItem;
   const cartItemCount = cartItem ? cartItem.quantity : 0;
 
-  if (!isMounted) return <div className="animate-pulse h-[400px] w-full bg-[var(--background)] rounded-[2.5rem]"></div>;
+  if (!isMounted) {
+    return (
+      <main className="max-w-4xl mx-auto" dir="rtl">
+        <div className="animate-pulse h-[400px] w-full bg-[var(--background)] rounded-[2.5rem]"></div>
+      </main>
+    );
+  }
 
   return (
     <main className="max-w-4xl mx-auto" dir="rtl">
       <div className="grid md:grid-cols-2 gap-8 lg:gap-12 bg-[var(--background)] text-[var(--foreground)] p-6 md:p-8 rounded-[2.5rem] border border-[var(--border)] shadow-md">
         
+        {/* حاوية الصورة مع خاصية relative لتعمل Image fill بكفاءة */}
         <div className="h-72 md:h-80 bg-[var(--background)] rounded-3xl flex items-center justify-center overflow-hidden border border-[var(--border)] relative">
           {product.image ? (
             <Image 

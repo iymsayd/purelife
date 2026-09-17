@@ -11,11 +11,11 @@ export default function CartComponent() {
     return (
       <div className="bg-card text-card-foreground rounded-[2.5rem] border border-border shadow-md p-6 min-h-[250px]" dir="rtl">
         <div className="flex justify-between items-center mb-6 pb-3 border-b border-border">
-          <div className="h-6 bg-muted rounded w-1/3"></div>
+          <div className="h-6 bg-muted rounded w-1/3 animate-pulse"></div>
         </div>
         <div className="space-y-4">
-          <div className="h-16 bg-muted/40 rounded-2xl"></div>
-          <div className="h-16 bg-muted/40 rounded-2xl"></div>
+          <div className="h-16 bg-muted/40 rounded-2xl animate-pulse"></div>
+          <div className="h-16 bg-muted/40 rounded-2xl animate-pulse"></div>
         </div>
       </div>
     );

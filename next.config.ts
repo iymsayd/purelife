@@ -11,7 +11,7 @@ const nextConfig: NextConfig = {
   // 2. إخفاء تسريب معلومات السيرفر (X-Powered-By)
   poweredByHeader: false,
 
-  // 3. إعدادات الصور وضبط الدومينات الخارجية لتحويلها لـ WebP
+  // 3. إعدادات الصور وضبط الدومينات الخارجية لتحويلها لـ WebP وضمان عدم ظهور إيرور الـ Next/Image
   images: {
     remotePatterns: [
       {
@@ -24,7 +24,28 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
-        hostname: 'encrypted-tbn0.gstatic.com', // 👈 أضفنا الدومين بتاع صور جوجل هنا عشان الإيرور يختفي
+        hostname: 'encrypted-tbn0.gstatic.com',
+      },
+      // دومينات صور الماركات والتوكيلات المستخدمة في الـ HeroSection
+      {
+        protocol: 'https',
+        hostname: 'images.alborsaanews.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cairocart.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'almania-group.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdn.salla.sa',
+      },
+       {
+        protocol: 'https',
+        hostname: '**',
       },
     ],
   },

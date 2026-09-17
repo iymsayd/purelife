@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
+import type { Metadata } from 'next';
 import { CalendarDays, ArrowUpRight, MapPin, ChevronRight, ChevronLeft } from 'lucide-react';
 import { getEvents } from './eventService';
 import { db } from '@/lib/firebase';
@@ -8,7 +9,15 @@ import { doc, getDoc } from 'firebase/firestore';
 // تفعيل الكاش لـ Next.js مع إعادة التحديث كل ساعة (ISR) لضمان مجانية الفايربيز
 export const revalidate = 3600;
 
-export async function generateMetadata() {
+interface EventsPageProps {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}
+
+export async function generateMetadata({ searchParams }: EventsPageProps): Promise<Metadata> {
+  const resolvedSearchParams = await searchParams;
+  const pageParam = typeof resolvedSearchParams.page === 'string' ? parseInt(resolvedSearchParams.page, 10) : 1;
+  const currentPage = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
+
   let headerData = {
     title: "فعاليات بيورلايف | Pure Life Events",
     description: "اطلع على أحدث ورش العمل والندوات وفعاليات الصيانة."
@@ -25,26 +34,27 @@ export async function generateMetadata() {
     console.error("Error fetching metadata:", e);
   }
 
+  const title = currentPage > 1 ? `${headerData.title} - صفحة ${currentPage}` : headerData.title;
+  const description = currentPage > 1 
+    ? `${headerData.description} - صفحة رقم ${currentPage}.` 
+    : headerData.description;
+
   return {
-    title: headerData.title,
-    description: headerData.description,
+    title,
+    description,
     keywords: ["فعاليات بيورلايف", "ورش عمل صيانة الفلاتر", "ندوات بيورلايف طنطا", "Pure Life Events"],
     alternates: {
-      canonical: 'https://purelife-eg.com/events',
+      canonical: currentPage > 1 ? `https://purelife-egypt.vercel.app/events?page=${currentPage}` : 'https://purelife-egypt.vercel.app/events',
     },
     openGraph: {
-      title: headerData.title,
-      description: headerData.description,
-      url: 'https://purelife-eg.com/events',
+      title,
+      description,
+      url: 'https://purelife-egypt.vercel.app/events',
       siteName: 'Pure Life Egypt',
       locale: 'ar_EG',
       type: 'website',
     },
   };
-}
-
-interface EventsPageProps {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 export default async function EventsPage({ searchParams }: EventsPageProps) {

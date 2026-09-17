@@ -8,8 +8,9 @@ export default function DashboardPage() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // حالة فلترة القسم داخل الجدول (قائمة منسدلة) و الـ Sort والصفحات
+  // حالة فلترة القسم داخل الجدول (قائمة منسدلة) و فلتر المخزون و الـ Sort والصفحات
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
+  const [stockFilter, setStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
   const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -76,6 +77,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     setSelectedCategoryFilter('all');
+    setStockFilter('all');
     setCurrentPage(1);
     fetchData();
   }, [activeTab]);
@@ -165,8 +167,8 @@ export default function DashboardPage() {
     e.preventDefault();
 
     const stockNumber = Number(formData.stock);
-    if (stockNumber <= 0 || isNaN(stockNumber)) {
-      setAlertModal({ show: true, message: "عذراً، لا يمكن إضافة أو حفظ منتج مخزونه 0 أو فارغ. يجب تحديد كمية مخزون صحيحة." });
+    if (stockNumber < 0 || isNaN(stockNumber)) {
+      setAlertModal({ show: true, message: "عذراً، يجب إدخال قيمة صحيحة للمخزون." });
       return;
     }
 
@@ -270,11 +272,21 @@ export default function DashboardPage() {
     });
   };
 
-  // تصفية العناصر وترتيبها حسب الأحدث/الأقدم
+  // تصفية العناصر وترتيبها حسب القسم، المخزون، والأحدث/الأقدم
   const filteredAndSortedItems = items
     .filter(item => {
-      if (selectedCategoryFilter === 'all') return true;
-      return item.category === selectedCategoryFilter;
+      // فلتر القسم
+      if (selectedCategoryFilter !== 'all' && item.category !== selectedCategoryFilter) {
+        return false;
+      }
+      // فلتر المخزون الجديد
+      if (stockFilter === 'in_stock' && item.stock <= 0) {
+        return false;
+      }
+      if (stockFilter === 'out_of_stock' && item.stock > 0) {
+        return false;
+      }
+      return true;
     })
     .sort((a, b) => {
       if (sortOrder === 'newest') {
@@ -315,12 +327,13 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {/* التبويبات الرئيسية وأدوات التحكم (فلتر الأقسام + الترتيب) */}
-      <div className="flex flex-col lg:flex-row justify-between items-stretch lg:items-center gap-4 mb-6">
-        <div className="flex gap-3 overflow-x-auto pb-2 lg:pb-0">
+      {/* التبويبات الرئيسية وأدوات التحكم (فلتر الأقسام + فلتر المخزون + الترتيب) مُحسنة بدون سكرول */}
+      <div className="flex flex-col xl:flex-row justify-between items-stretch xl:items-center gap-3 mb-6">
+        {/* التبويبات بحجم مريح وبدون سكرول */}
+        <div className="flex gap-2">
           <button
             onClick={() => { setActiveTab('products'); setCurrentPage(1); }}
-            className={`px-6 py-3 rounded-2xl font-black text-sm transition cursor-pointer border whitespace-nowrap ${
+            className={`flex-1 sm:flex-none px-4 md:px-5 py-2.5 rounded-2xl font-black text-xs md:text-sm transition cursor-pointer border whitespace-nowrap text-center ${
               activeTab === 'products'
                 ? 'bg-[var(--secondary)] text-white border-[var(--secondary)] shadow-md'
                 : 'bg-[var(--background)] text-[var(--foreground)] border-[var(--border)] hover:bg-[var(--secondary)]/10'
@@ -331,7 +344,7 @@ export default function DashboardPage() {
           </button>
           <button
             onClick={() => { setActiveTab('used_products'); setCurrentPage(1); }}
-            className={`px-6 py-3 rounded-2xl font-black text-sm transition cursor-pointer border whitespace-nowrap ${
+            className={`flex-1 sm:flex-none px-4 md:px-5 py-2.5 rounded-2xl font-black text-xs md:text-sm transition cursor-pointer border whitespace-nowrap text-center ${
               activeTab === 'used_products'
                 ? 'bg-[var(--secondary)] text-white border-[var(--secondary)] shadow-md'
                 : 'bg-[var(--background)] text-[var(--foreground)] border-[var(--border)] hover:bg-[var(--secondary)]/10'
@@ -342,34 +355,48 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* فلاتر الأقسام (Select Dropdown) والترتيب */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+        {/* فلاتر الأقسام، المخزون، والترتيب بمساحات مضغوطة ومنظمة */}
+        <div className="flex flex-wrap items-center gap-2">
           {/* فلتر القسم كـ Dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-[var(--muted-foreground)] whitespace-nowrap">القسم:</span>
+          <div className="flex items-center gap-1.5 bg-[var(--background)] border border-[var(--border)] rounded-xl px-2.5 py-1.5">
+            <span className="text-[11px] font-bold text-[var(--muted-foreground)] whitespace-nowrap">القسم:</span>
             <select
               value={selectedCategoryFilter}
               onChange={(e) => { setSelectedCategoryFilter(e.target.value); setCurrentPage(1); }}
-              className="bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-[var(--secondary)] cursor-pointer w-full sm:w-auto"
+              className="bg-transparent text-[var(--foreground)] text-xs font-bold focus:outline-none cursor-pointer"
             >
-              <option value="all">كل الأقسام</option>
-              <option value="فلاتر">فلاتر</option>
-              <option value="تكييفات">تكييفات</option>
-              <option value="قطع غيار فلاتر">قطع غيار فلاتر</option>
-              <option value="قطع غيار تكييفات">قطع غيار تكييفات</option>
+              <option value="all" className="bg-[var(--background)]">كل الأقسام</option>
+              <option value="فلاتر" className="bg-[var(--background)]">فلاتر</option>
+              <option value="تكييفات" className="bg-[var(--background)]">تكييفات</option>
+              <option value="قطع غيار فلاتر" className="bg-[var(--background)]">قطع غيار فلاتر</option>
+              <option value="قطع غيار تكييفات" className="bg-[var(--background)]">قطع غيار تكييفات</option>
+            </select>
+          </div>
+
+          {/* فلتر المخزون الجديد (المتوفر / خلصان 0) */}
+          <div className="flex items-center gap-1.5 bg-[var(--background)] border border-[var(--border)] rounded-xl px-2.5 py-1.5">
+            <span className="text-[11px] font-bold text-[var(--muted-foreground)] whitespace-nowrap">المخزون:</span>
+            <select
+              value={stockFilter}
+              onChange={(e) => { setStockFilter(e.target.value as any); setCurrentPage(1); }}
+              className="bg-transparent text-[var(--foreground)] text-xs font-bold focus:outline-none cursor-pointer"
+            >
+              <option value="all" className="bg-[var(--background)]">الكل</option>
+              <option value="in_stock" className="bg-[var(--background)]">المتوفرة (&gt; 0)</option>
+              <option value="out_of_stock" className="bg-[var(--background)]">الخلصانة (0)</option>
             </select>
           </div>
 
           {/* الترتيب (الأحدث / الأقدم) */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-[var(--muted-foreground)] whitespace-nowrap">الترتيب:</span>
+          <div className="flex items-center gap-1.5 bg-[var(--background)] border border-[var(--border)] rounded-xl px-2.5 py-1.5">
+            <span className="text-[11px] font-bold text-[var(--muted-foreground)] whitespace-nowrap">الترتيب:</span>
             <select
               value={sortOrder}
               onChange={(e) => setSortOrder(e.target.value as 'newest' | 'oldest')}
-              className="bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] rounded-xl px-3 py-2.5 text-xs font-bold focus:outline-none focus:border-[var(--secondary)] cursor-pointer w-full sm:w-auto"
+              className="bg-transparent text-[var(--foreground)] text-xs font-bold focus:outline-none cursor-pointer"
             >
-              <option value="newest">من الأحدث للأقدم ⬇️</option>
-              <option value="oldest">من الأقدم للأحدث ⬆️</option>
+              <option value="newest" className="bg-[var(--background)]">الأحدث ⬇️</option>
+              <option value="oldest" className="bg-[var(--background)]">الأقدم ⬆️</option>
             </select>
           </div>
         </div>
@@ -540,11 +567,11 @@ export default function DashboardPage() {
                   <input
                     type="number"
                     required
-                    min="1"
+                    min="0"
                     value={formData.stock}
                     onChange={(e) => setFormData({ ...formData, stock: e.target.value })}
                     className="w-full bg-[var(--card)] border border-[var(--border)] rounded-2xl px-4 py-3 text-sm text-[var(--foreground)] focus:outline-none focus:border-[var(--secondary)]"
-                    placeholder="مثال: 15 (إذا كان 0 لن يتم الحفظ)"
+                    placeholder="مثال: 15 أو 0 (للخلصان)"
                   />
                 </div>
               </div>

@@ -212,6 +212,8 @@ export default function Footer() {
     <footer dir="rtl" className="bg-black text-gray-200 py-12 mt-12 border-t border-gray-900 transition-colors duration-300 shadow-inner">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 mb-12 text-right">
+          
+          {/* قسم نبذة عن الشركة ومعلومات التواصل والسوشيال ميديا */}
           <section className="text-right">
             <h2 className={headingClass}>{footerData.title}</h2>
             <p className="text-gray-400 text-xs md:text-sm leading-relaxed mb-6" dangerouslySetInnerHTML={{ __html: footerData.description }} />
@@ -219,28 +221,70 @@ export default function Footer() {
               <span className="flex items-center gap-2">📧 {footerData.email}</span>
               <span className="flex items-center gap-2" dir="ltr">📞 {footerData.phone}</span>
             </div>
-            <div className="flex gap-4 text-gray-400">
-              <a href={footerData.facebook} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-gray-900 hover:bg-[#1877F2] hover:text-white transition-all duration-300 transform hover:scale-110 shadow-sm"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg></a>
-              <a href={footerData.instagram} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-gray-900 hover:bg-gradient-to-tr hover:from-[#feda75] hover:via-[#fa7e1e] hover:to-[#d62976] hover:text-white transition-all duration-300 transform hover:scale-110 shadow-sm"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg></a>
-              <a href={footerData.twitter} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-gray-900 hover:bg-white hover:text-black transition-all duration-300 transform hover:scale-110 shadow-sm"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
-              <a href={footerData.linkedin} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-full bg-gray-900 hover:bg-[#0A66C2] hover:text-white transition-all duration-300 transform hover:scale-110 shadow-sm"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg></a>
+            
+            {/* روابط منصات التواصل الاجتماعي مع الـ aria-label بدقة */}
+            <div className="flex gap-4 text-gray-400" aria-label="منصات التواصل الاجتماعي لشركة بيورلايف">
+              <a 
+                href={footerData.facebook} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                aria-label="زيارة صفحة بيورلايف الرسمية على فيسبوك" 
+                className="p-2.5 rounded-full bg-gray-900 hover:bg-[#1877F2] hover:text-white transition-all duration-300 transform hover:scale-110 shadow-sm"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+              </a>
+              <a 
+                href={footerData.instagram} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                aria-label="زيارة حساب بيورلايف الرسمي على إنستجرام" 
+                className="p-2.5 rounded-full bg-gray-900 hover:bg-gradient-to-tr hover:from-[#feda75] hover:via-[#fa7e1e] hover:to-[#d62976] hover:text-white transition-all duration-300 transform hover:scale-110 shadow-sm"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+              </a>
+              <a 
+                href={footerData.twitter} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                aria-label="زيارة حساب بيورلايف الرسمي على منصة إكس (تويتر سابقاً)" 
+                className="p-2.5 rounded-full bg-gray-900 hover:bg-white hover:text-black transition-all duration-300 transform hover:scale-110 shadow-sm"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+              </a>
+              <a 
+                href={footerData.linkedin} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                aria-label="زيارة صفحة بيورلايف الرسمية على لينكد إن" 
+                className="p-2.5 rounded-full bg-gray-900 hover:bg-[#0A66C2] hover:text-white transition-all duration-300 transform hover:scale-110 shadow-sm"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"></path><rect x="2" y="9" width="4" height="12"></rect><circle cx="4" cy="4" r="2"></circle></svg>
+              </a>
             </div>
           </section>
 
-          <nav className="text-right" aria-label="Footer Navigation">
+          {/* قسم روابط المنتجات */}
+          <nav className="text-right" aria-label="قائمة منتجات وأقسام متجر بيورلايف">
             <h3 className={headingClass}>منتجات بيور لايف</h3>
             <ul className="space-y-3 text-gray-400 text-xs md:text-sm font-medium">
               {navItems.map((item) => (
                 <li key={item.name}>
-                  <Link href={`/products?category=${encodeURIComponent(item.category)}`} className="hover:text-[#0ea5e9] transition-colors duration-300 inline-block transform hover:translate-x-1">{item.name}</Link>
+                  <Link 
+                    href={`/products?category=${encodeURIComponent(item.category)}`} 
+                    aria-label={`تصفح قسم ${item.name}`}
+                    className="hover:text-[#0ea5e9] transition-colors duration-300 inline-block transform hover:translate-x-1"
+                  >
+                    {item.name}
+                  </Link>
                 </li>
               ))}
             </ul>
           </nav>
 
+          {/* قسم نموذج التواصل السريع */}
           <section className="text-right">
             <h4 className={headingClass}>تواصل معنا</h4>
-            <form className="flex flex-col gap-3" onSubmit={handleSubmit} noValidate>
+            <form className="flex flex-col gap-3" onSubmit={handleSubmit} noValidate aria-label="نموذج مراسلة خدمة عملاء بيورلايف">
               <div>
                 <label htmlFor="footer-name" className={labelClass}>الاسم</label>
                 <input 
@@ -251,9 +295,12 @@ export default function Footer() {
                   onChange={(e) => handleInputChange('name', e.target.value)} 
                   onBlur={() => validateField('name', formData.name, !!currentUser)}
                   className={`${inputClass} ${formErrors.name ? 'border-red-500' : ''}`} 
-                  placeholder=" الاسم "
+                  placeholder="الاسم"
+                  aria-required="true"
+                  aria-invalid={!!formErrors.name}
+                  aria-describedby={formErrors.name ? "footer-name-error" : undefined}
                 />
-                {formErrors.name && <span className="block text-[10px] text-red-400 mt-1 font-bold">{formErrors.name}</span>}
+                {formErrors.name && <span id="footer-name-error" className="block text-[10px] text-red-400 mt-1 font-bold">{formErrors.name}</span>}
               </div>
 
               <div>
@@ -270,12 +317,15 @@ export default function Footer() {
                   onBlur={() => !currentUser && validateField('email', formData.email, !!currentUser)}
                   className={`${inputClass} ${currentUser ? 'opacity-75 cursor-not-allowed bg-gray-800' : ''} ${formErrors.email ? 'border-red-500' : ''}`} 
                   placeholder="name@example.com"
+                  aria-required="true"
+                  aria-invalid={!!formErrors.email}
+                  aria-describedby={formErrors.email ? "footer-email-error" : undefined}
                 />
-                {formErrors.email && <span className="block text-[10px] text-red-400 mt-1 font-bold">{formErrors.email}</span>}
+                {formErrors.email && <span id="footer-email-error" className="block text-[10px] text-red-400 mt-1 font-bold">{formErrors.email}</span>}
               </div>
 
               {profileWarning && (
-                <p className="text-amber-400 text-[11px] font-medium leading-tight">
+                <p className="text-amber-400 text-[11px] font-medium leading-tight" role="alert">
                   تنبيه: أنت عدلت اسمك، سيتم تحديث حسابك الأساسي تلقائياً عند الإرسال.
                 </p>
               )}
@@ -291,29 +341,34 @@ export default function Footer() {
                   onBlur={() => validateField('message', formData.message, !!currentUser)}
                   className={`${inputClass} resize-y min-h-[70px] max-h-[140px] ${formErrors.message ? 'border-red-500' : ''}`} 
                   placeholder="أكتب رسالتك أو استفسارك هنا..."
+                  aria-required="true"
+                  aria-invalid={!!formErrors.message}
+                  aria-describedby={formErrors.message ? "footer-message-error" : undefined}
                 />
-                {formErrors.message && <span className="block text-[10px] text-red-400 mt-1 font-bold">{formErrors.message}</span>}
+                {formErrors.message && <span id="footer-message-error" className="block text-[10px] text-red-400 mt-1 font-bold">{formErrors.message}</span>}
               </div>
 
               <button 
                 type="submit" 
                 disabled={loading} 
+                aria-label="إرسال رسالة أو طلب استفسار إلى بيورلايف"
                 className="bg-[#0ea5e9] hover:bg-[#0284c7] text-white transition-colors py-3 rounded-xl font-bold cursor-pointer mt-1 text-xs md:text-sm shadow-sm disabled:opacity-50"
               >
                 {loading ? "جاري الإرسال..." : "إرسال الطلب"}
               </button>
 
-              {submitted && (<p className="text-emerald-400 text-xs font-semibold mt-1 text-center animate-pulse">تم إرسال رسالتك بنجاح!</p>)}
+              {submitted && (<p className="text-emerald-400 text-xs font-semibold mt-1 text-center animate-pulse" role="status">تم إرسال رسالتك بنجاح!</p>)}
             </form>
           </section>
         </div>
 
+        {/* الحقوق وسياسات الموقع */}
         <div className="text-center text-gray-500 text-xs md:text-sm border-t border-gray-900 pt-8 space-y-4">
           <p>© {new Date().getFullYear()} بيورلايف - جميع الحقوق محفوظة</p>
-          <div className="flex justify-center gap-6">
-            <Link href="/quality-policy" className="hover:text-[#0ea5e9] transition-colors">سياسة الجودة</Link>
-            <Link href="/privacy-policy" className="hover:text-[#0ea5e9] transition-colors">سياسة الخصوصية</Link>
-          </div>
+          <nav className="flex justify-center gap-6" aria-label="روابط السياسات القانونية">
+            <Link href="/quality-policy" aria-label="قراءة سياسة الجودة الخاصة بشركة بيورلايف" className="hover:text-[#0ea5e9] transition-colors">سياسة الجودة</Link>
+            <Link href="/privacy-policy" aria-label="قراءة سياسة الخصوصية وحماية البيانات" className="hover:text-[#0ea5e9] transition-colors">سياسة الخصوصية</Link>
+          </nav>
         </div>
       </div>
     </footer>

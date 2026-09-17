@@ -25,9 +25,31 @@ export async function generateMetadata({ params }: PageProps) {
   
   return { 
     title: post ? `${post.title} | مدونة بيورلايف` : "مقال غير موجود", 
-    description: post?.summary || "تفاصيل المقال التقنية",
+    description: post?.summary || "تفاصيل المقال التقنية من مدونة بيورلايف",
     alternates: {
       canonical: `https://purelife-eg.com/blog/${slug}`,
+    },
+    openGraph: {
+      title: post ? `${post.title} | مدونة بيورلايف` : "مقال غير موجود",
+      description: post?.summary || "تفاصيل المقال التقنية من مدونة بيورلايف",
+      url: `https://purelife-eg.com/blog/${slug}`,
+      siteName: 'بيورلايف',
+      images: [
+        {
+          url: post?.image || 'https://purelife-eg.com/og-image.jpg',
+          width: 1200,
+          height: 630,
+          alt: post?.title || 'مدونة بيورلايف',
+        },
+      ],
+      locale: 'ar_AR',
+      type: 'article',
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: post ? `${post.title} | مدونة بيورلايف` : "مقال غير موجود",
+      description: post?.summary || "تفاصيل المقال التقنية من مدونة بيورلايف",
+      images: [post?.image || 'https://purelife-eg.com/og-image.jpg'],
     },
   };
 }

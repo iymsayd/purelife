@@ -61,14 +61,13 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
   const displayTitle = product.nameAr || product.titleAr || product.title || product.name || '';
   const displayDesc = product.descriptionAr || product.descAr || product.description || '';
   const condition = product.conditionAr || product.condition || '';
+  const imageAlt = displayTitle || product.name || product.title || "صورة الجهاز المستعمل";
 
-  // التحقق من المخزون (لو مش موجود بيتاخد افتراضي 99)
   const currentStock = typeof product.stock === 'number' ? product.stock : 99;
   const isOutOfStock = currentStock <= 0;
 
   const getProductDetails = () => {
     const category = product.category || "";
-    
     const detailsList: { label: string; value: any }[] = [{ label: "الفئة:", value: category || "فلاتر" }];
 
     if (category === "قطع غيار فلاتر" || category === "قطع غيار تكييفات") {
@@ -82,7 +81,6 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
         { label: "بلد المنشأ:", value: product.origin }
       );
     } else {
-      // الافتراضي للفلاتر
       detailsList.push(
         { label: "الماركة:", value: product.brand },
         { label: "عدد المراحل:", value: product.stages },
@@ -101,7 +99,6 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
 
   const details = getProductDetails().filter(d => d.value);
 
-  // تجهيز المنتج المستعمل للسلة مع الثوابت المطلوبة وبدون أي مشاكل تايب
   const productForCart = {
     ...product,
     title: displayTitle,
@@ -123,23 +120,29 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
     setTimeout(() => setShowAdded(false), 1500);
   };
 
+  // حماية الهيدريشن بنفس ستايل الجديد تماماً
   if (!isMounted) {
-    return <div className="animate-pulse h-[400px] w-full bg-[var(--background)] rounded-[2.5rem]"></div>;
+    return (
+      <main className="max-w-4xl mx-auto" dir="rtl">
+        <div className="animate-pulse h-[400px] w-full bg-background rounded-[2.5rem]"></div>
+      </main>
+    );
   }
 
   return (
     <main className="max-w-4xl mx-auto" dir="rtl">
-      <div className="grid md:grid-cols-2 gap-8 lg:gap-12 bg-[var(--background)] text-[var(--foreground)] p-6 md:p-8 rounded-[2.5rem] border border-[var(--border)] shadow-md transition-colors duration-300">
+      <div className="grid md:grid-cols-2 gap-8 lg:gap-12 bg-background text-foreground p-6 md:p-8 rounded-[2.5rem] border border-border shadow-md transition-colors duration-300">
         
-        {/* صورة المنتج المستعمل مع بادج الحالة وتعديل الـ Image بـ fill و alt */}
-        <div className="h-72 md:h-80 bg-[var(--background)] rounded-3xl flex items-center justify-center overflow-hidden relative border border-[var(--border)] shadow-inner">
+        {/* حاوية الصورة */}
+        <div className="h-72 md:h-80 bg-background rounded-3xl flex items-center justify-center overflow-hidden relative border border-border shadow-inner">
           {product.image ? (
             <Image 
               src={product.image} 
-              alt={displayTitle || 'صورة الجهاز المستعمل'} 
+              alt={imageAlt} 
               fill
               sizes="(max-width: 768px) 100vw, 50vw"
               className="object-cover hover:scale-105 transition-transform duration-500" 
+              priority
             />
           ) : (
             <span className="text-8xl">📦</span>
@@ -151,7 +154,7 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
           )}
         </div>
         
-        {/* تفاصيل المنتج المستعمل */}
+        {/* تفاصيل المنتج */}
         <div className="space-y-5 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center gap-2">
@@ -160,33 +163,33 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
               </span>
               {isOutOfStock && (
                 <span className="inline-block bg-red-500/10 text-red-600 text-xs px-3 py-1 rounded-full font-black">
-                  غير متاح حالياً
+                  {dict.outOfStock}
                 </span>
               )}
             </div>
 
-            <h1 className="text-2xl md:text-3xl font-black text-[var(--foreground)]">{displayTitle}</h1>
+            <h1 className="text-2xl md:text-3xl font-black text-foreground">{displayTitle}</h1>
             <p className="text-2xl text-[var(--secondary)] font-black">
               {product.price ? `${product.price} ج.م` : dict.callForPrice}
             </p>
             
-            <div className="text-sm text-[var(--muted-foreground)] space-y-2 bg-[var(--background)] p-4 rounded-2xl border border-[var(--border)]">
+            <div className="text-sm text-muted-foreground space-y-2 bg-background p-4 rounded-2xl border border-border">
                {details.map((d, i) => (
-                 <p key={i}><span className="font-bold text-[var(--foreground)]">{d.label}</span> <span className="text-[var(--foreground)] font-medium">{d.value}</span></p>
+                 <p key={i}><span className="font-bold text-foreground">{d.label}</span> <span className="text-foreground font-medium">{d.value}</span></p>
                ))}
             </div>
 
             {displayDesc && (
-              <div className="pt-3 border-t border-[var(--border)]">
-                <h3 className="font-bold text-[var(--foreground)] mb-2">{dict.description}</h3>
-                <p className="text-sm text-[var(--muted-foreground)] leading-relaxed whitespace-pre-line">
+              <div className="pt-3 border-t border-border">
+                <h3 className="font-bold text-foreground mb-2">{dict.description}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
                   {displayDesc}
                 </p>
               </div>
             )}
           </div>
 
-          <div className="space-y-4 pt-4 border-t border-[var(--border)]">
+          <div className="space-y-4 pt-4 border-t border-border">
             {isOutOfStock ? (
               <button 
                 disabled
@@ -209,24 +212,24 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
                   <span>{dict.addedCartCheck}</span>
                 </div>
 
-                <div className="flex items-center justify-between bg-[var(--background)] p-3 rounded-2xl border border-[var(--border)]">
-                  <span className="text-sm font-bold text-[var(--foreground)]">{dict.quantity}</span>
+                <div className="flex items-center justify-between bg-background p-3 rounded-2xl border border-border">
+                  <span className="text-sm font-bold text-foreground">{dict.quantity}</span>
                   <div className="flex items-center gap-3">
                     <button 
                       onClick={() => decreaseQuantity(product.id, 'used')}
-                      className="w-8 h-8 bg-[var(--background)] border border-[var(--border)] rounded-xl font-bold text-[var(--secondary)] shadow-sm hover:opacity-80 flex items-center justify-center cursor-pointer"
+                      className="w-8 h-8 bg-background border border-border rounded-xl font-bold text-[var(--secondary)] shadow-sm hover:opacity-80 flex items-center justify-center cursor-pointer"
                       type="button"
                     >
                       -
                     </button>
-                    <span className="font-black text-lg w-6 text-center text-[var(--foreground)]">{cartItemCount}</span>
+                    <span className="font-black text-lg w-6 text-center text-foreground">{cartItemCount}</span>
                     <button 
                       onClick={() => {
                         if (cartItemCount < currentStock) {
                           increaseQuantity(product.id, 'used');
                         }
                       }}
-                      className={`w-8 h-8 bg-[var(--background)] border border-[var(--border)] rounded-xl font-bold flex items-center justify-center shadow-sm ${cartItemCount >= currentStock ? 'opacity-40 cursor-not-allowed text-gray-400' : 'text-[var(--secondary)] hover:opacity-80 cursor-pointer'}`}
+                      className={`w-8 h-8 bg-background border border-border rounded-xl font-bold flex items-center justify-center shadow-sm ${cartItemCount >= currentStock ? 'opacity-40 cursor-not-allowed text-gray-400' : 'text-[var(--secondary)] hover:opacity-80 cursor-pointer'}`}
                       type="button"
                     >
                       +
@@ -244,9 +247,9 @@ export default function ProductDetailsClient({ product }: ProductDetailsClientPr
               </div>
             )}
 
-            <div className="p-3 bg-[var(--background)] rounded-xl text-center border border-[var(--border)] text-xs md:text-sm text-[var(--muted-foreground)]">
+            <div className="p-3 bg-background rounded-xl text-center border border-border text-xs md:text-sm text-muted-foreground">
               <p>
-                {dict.cartQuantityLabel} <span className="font-bold text-[var(--secondary)]">{cartItemCount}</span> | {dict.cartTotalLabel} <span className="font-semibold text-[var(--foreground)]">{safeCart.length}</span>
+                {dict.cartQuantityLabel} <span className="font-bold text-[var(--secondary)]">{cartItemCount}</span> | {dict.cartTotalLabel} <span className="font-semibold text-foreground">{safeCart.length}</span>
               </p>
             </div>
           </div>

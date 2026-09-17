@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Tag, ArrowLeft, ArrowRight, Award } from 'lucide-react';
 
 interface Brand {
@@ -75,28 +76,32 @@ export default function HeroSection({
           </div>
         </div>
 
-        {/* كارت الماركات - تم التعديل بـ flex-col و gap منتظم لضمان احتواء كافة العناصر وظهور النص السفلي بالكامل */}
+        {/* كارت الماركات */}
         <div className="relative w-full rounded-3xl overflow-hidden shadow-xl bg-[var(--background)] border border-[var(--border)] flex flex-col justify-between p-6 sm:p-8 text-center transition-colors duration-300">
           
           {/* شارة التوكيلات المعتمدة */}
-          <div className="self-end bg-[var(--secondary)]/10 text-[var(--secondary)] px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 border border-[var(--secondary)]/20 mb-4">
+          <div className="self-end bg-[var(--secondary)]/10 text-[var(--secondary)] px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 border border-[var(--secondary)]/20 mb-4 z-10">
             <Award size={14} /> توكيلات معتمدة رسمية
           </div>
           
           {/* شبكة الماركات */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 w-full items-center my-4">
             {brands.map((brand, idx) => (
-              <div key={idx} className="p-3 bg-[var(--card)]/80 backdrop-blur-xs rounded-xl border border-[var(--border)] flex items-center justify-center h-20 shadow-sm hover:border-[var(--secondary)] transition-all duration-300 group/brand overflow-hidden">
-                <img 
-                  src={brand.src} 
-                  alt={brand.alt} 
-                  className="max-h-12 max-w-full object-contain dark:brightness-95 bg-transparent mix-blend-normal transition-transform duration-300 group-hover/brand:scale-110" 
-                />
+              <div key={idx} className="relative p-3 bg-[var(--card)]/80 backdrop-blur-xs rounded-xl border border-[var(--border)] flex items-center justify-center h-20 shadow-sm hover:border-[var(--secondary)] transition-all duration-300 group/brand overflow-hidden">
+                <div className="relative w-full h-full">
+                  <Image 
+                    src={brand.src} 
+                    alt={brand.alt} 
+                    fill 
+                    sizes="(max-width: 768px) 50vw, 25vw"
+                    className="object-contain dark:brightness-95 bg-transparent transition-transform duration-300 group-hover/brand:scale-110 p-2" 
+                  />
+                </div>
               </div>
             ))}
           </div>
 
-          {/* النص السفلي (وكيل حصري...) ظاهر تماماً على جميع الشاشات */}
+          {/* النص السفلي */}
           <p className="text-xs sm:text-sm text-[var(--secondary)] font-bold mt-4 w-full text-center">
             {footerNote}
           </p>

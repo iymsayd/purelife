@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { ShoppingBag, Sparkles, ChevronRight, ChevronLeft } from 'lucide-react';
 import ProductCard from '@/components/layout/ProductCard';
 import FilterSidebar from './FilterSidebar';
@@ -20,6 +21,11 @@ export default function ProductListClient({
   const router = useRouter();
   const pathname = usePathname();
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const getParam = (key: string) => {
     const val = clientSearchParams?.get(key) || searchParams?.[key];
     return typeof val === 'string' ? val : "";
@@ -34,7 +40,6 @@ export default function ProductListClient({
   const cooling = getParam('cooling');
   const priceSort = getParam('priceSort');
   
-  // استخراج ورقم الصفحة الحالية من الـ SearchParams
   const pageParam = clientSearchParams?.get('page') || searchParams?.page;
   const parsedPage = typeof pageParam === 'string' ? parseInt(pageParam, 10) : 1;
   const currentPage = isNaN(parsedPage) || parsedPage < 1 ? 1 : parsedPage;
@@ -61,7 +66,6 @@ export default function ProductListClient({
     return 0;
   });
 
-  // حسابات التقسيم (Pagination)
   const totalProducts = filtered.length;
   const totalPages = Math.ceil(totalProducts / pageSize);
   const validCurrentPage = Math.min(currentPage, totalPages > 0 ? totalPages : 1);
@@ -69,7 +73,6 @@ export default function ProductListClient({
   const startIndex = (validCurrentPage - 1) * pageSize;
   const currentProducts = filtered.slice(startIndex, startIndex + pageSize);
 
-  // دالة لتغيير الصفحة مع الحفاظ على الفلاتر الأخرى
   const createPageUrl = (pageNumber: number) => {
     const params = new URLSearchParams(clientSearchParams?.toString() || '');
     if (pageNumber === 1) {
@@ -79,6 +82,15 @@ export default function ProductListClient({
     }
     return `${pathname}?${params.toString()}`;
   };
+
+  // حماية ضد اختلاف الهيدريشن بين السيرفر والكلينت
+  if (!mounted) {
+    return (
+      <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16 max-w-7xl" dir="rtl">
+        <div className="animate-pulse h-[600px] w-full bg-secondary/10 rounded-[2.5rem]"></div>
+      </main>
+    );
+  }
 
   return (
     <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-16 max-w-7xl transition-colors duration-300" dir="rtl">
@@ -99,10 +111,9 @@ export default function ProductListClient({
         <SearchComponent products={initialProducts} />
       </div>
 
-      {/* تخطيط الصفحة: السلة والفلتر في الشاشات الصغيرة تظهر في الأعلى (order-1)، وفي الشاشات الكبيرة تصبح يميناً أو يساراً (order-2) */}
+      {/* تخطيط الصفحة */}
       <div className="flex flex-col lg:flex-row gap-8 items-start">
         
-        {/* قسم الفلتر والسلة (يظهر أولاً في الموبايل لسهولة الاستخدام) */}
         <aside className="w-full lg:w-80 space-y-6 shrink-0 order-1 lg:order-2">
           <div className="lg:sticky lg:top-24 space-y-6">
             <CartComponent />
@@ -110,7 +121,6 @@ export default function ProductListClient({
           </div>
         </aside>
 
-        {/* قسم عرض المنتجات */}
         <section className="flex-1 w-full min-w-0 order-2 lg:order-1">
           <div className="flex items-center justify-between mb-6 px-2">
             <h2 className="text-xl sm:text-2xl font-black text-[var(--secondary)] flex items-center gap-2">
@@ -136,10 +146,8 @@ export default function ProductListClient({
                 ))}
               </div>
 
-              {/* نظام التقسيم (Pagination) */}
               {totalPages > 1 && (
                 <nav className="flex flex-wrap items-center justify-center gap-2 pt-12 pb-4" aria-label="Pagination">
-                  {/* زر السابق */}
                   {validCurrentPage > 1 ? (
                     <button
                       onClick={() => router.push(createPageUrl(validCurrentPage - 1))}
@@ -155,7 +163,6 @@ export default function ProductListClient({
                     </span>
                   )}
 
-                  {/* أرقام الصفحات */}
                   <div className="flex flex-wrap items-center gap-1.5">
                     {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNumber) => {
                       const isActive = pageNumber === validCurrentPage;
@@ -175,7 +182,6 @@ export default function ProductListClient({
                     })}
                   </div>
 
-                  {/* زر التالي */}
                   {validCurrentPage < totalPages ? (
                     <button
                       onClick={() => router.push(createPageUrl(validCurrentPage + 1))}

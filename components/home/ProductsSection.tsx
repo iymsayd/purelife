@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 
 export default function ProductsSection({ products = [] }: { products?: any[] }) {
@@ -34,7 +35,7 @@ export default function ProductsSection({ products = [] }: { products?: any[] })
 
       {limitedProducts && limitedProducts.length > 0 ? (
         <div className="relative px-2 md:px-12">
-          {/* أسهم التنقل ظاهرة في جميع الشاشات عشان السلايدر يفضل شغال */}
+          {/* أسهم التنقل */}
           <button 
             onClick={() => scroll('right')} 
             className="flex items-center justify-center absolute right-0 top-1/2 -translate-y-1/2 z-20 p-2 md:p-3 rounded-full border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--secondary)] hover:text-white transition-all shadow-xl cursor-pointer"
@@ -53,7 +54,7 @@ export default function ProductsSection({ products = [] }: { products?: any[] })
             <ChevronLeft size={20} />
           </button>
 
-          {/* سلايدر أفقي متجاوب: منتج واحد للموبايل، منتجين للتابلت، متعدد للديسكتوب */}
+          {/* سلايدر المنتجات */}
           <div 
             ref={scrollRef}
             className="flex gap-4 md:gap-6 overflow-x-auto pb-4 pt-1 scroll-smooth snap-x snap-mandatory no-scrollbar" 
@@ -79,7 +80,15 @@ export default function ProductsSection({ products = [] }: { products?: any[] })
                     <div className="bg-[var(--background)] rounded-2xl p-5 border border-[var(--border)] hover:border-[var(--secondary)] shadow-sm hover:shadow-2xl transition-all duration-300 flex flex-col h-full hover:-translate-y-1.5">
                       <div className="h-44 rounded-xl overflow-hidden mb-4 bg-[var(--background)] border border-[var(--border)] flex items-center justify-center relative">
                         {isValidImage ? (
-                          <img src={itemImg} alt={itemTitle} className="w-full h-full object-cover group-hover/card:scale-110 transition duration-500" />
+                          <div className="relative w-full h-full">
+                            <Image 
+                              src={itemImg} 
+                              alt={itemTitle} 
+                              fill 
+                              sizes="(max-width: 768px) 100vw, 350px"
+                              className="object-cover group-hover/card:scale-110 transition duration-500" 
+                            />
+                          </div>
                         ) : (
                           <span className="text-5xl transition-transform duration-300 group-hover/card:scale-110">💧</span>
                         )}

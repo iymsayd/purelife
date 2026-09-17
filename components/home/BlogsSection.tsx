@@ -2,6 +2,7 @@
 
 import { useRef } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 
 interface BlogPost {
@@ -78,7 +79,7 @@ export default function BlogsSection({
         </div>
 
         <div className="relative px-2 md:px-12">
-          {/* أسهم التنقل للسلايدر */}
+          {/* أسهم التنقل */}
           <button 
             onClick={() => scroll('right')} 
             className="flex items-center justify-center absolute right-0 top-1/2 -translate-y-1/2 z-20 p-2 md:p-3 rounded-full border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--secondary)] hover:text-white transition-all shadow-xl cursor-pointer"
@@ -95,7 +96,7 @@ export default function BlogsSection({
             <ChevronLeft size={20} />
           </button>
 
-          {/* حاوية السلايدر المتجاوب (منتج واحد للموبايل، منتجين للتابلت، متعدد للديسكتوب) */}
+          {/* حاوية السلايدر */}
           <div 
             ref={scrollRef}
             className="flex gap-4 md:gap-6 overflow-x-auto pb-2 pt-1 scroll-smooth snap-x snap-mandatory no-scrollbar" 
@@ -117,8 +118,16 @@ export default function BlogsSection({
                   <Link href={`/blog/${post.slug || post.id}`} className="group block h-full cursor-pointer">
                     <div className="bg-[var(--background)] rounded-2xl p-6 border border-[var(--border)] hover:border-[var(--secondary)] shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col h-full hover:-translate-y-1">
                       {post.image && (
-                        <div className="h-40 rounded-xl overflow-hidden mb-4 bg-[var(--background)] border border-[var(--border)]">
-                          <img src={post.image} alt={postTitle} className="w-full h-full object-cover group-hover:scale-115 transition duration-500" />
+                        <div className="h-40 rounded-xl overflow-hidden mb-4 bg-[var(--background)] border border-[var(--border)] relative">
+                          <div className="relative w-full h-full">
+                            <Image 
+                              src={post.image} 
+                              alt={postTitle} 
+                              fill 
+                              sizes="(max-width: 768px) 100vw, 350px"
+                              className="object-cover group-hover:scale-115 transition duration-500" 
+                            />
+                          </div>
                         </div>
                       )}
                       <h3 className="text-xl font-bold mb-2 group-hover:text-[var(--secondary)] transition line-clamp-1 text-[var(--foreground)]">{postTitle}</h3>

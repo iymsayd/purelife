@@ -26,15 +26,16 @@ export default function ProductCard({ product, isUsed = false }: ProductCardProp
   const productData = { ...product, type: itemType, isUsed: isUsed };
   
   const safeArray = Array.isArray(cartItems) ? cartItems : [];
-  const cartItem = isMounted ? safeArray.find((item: any) => 
-    String(item?.id) === String(product?.id) && 
-    ((item?.type || (item?.isUsed ? 'used' : undefined)) === (itemType || undefined))
-  ) : null;
+  
+  // التطابق الآمن مع مراعاة حالة التحميل لتجنب Hydration Mismatch
+  const cartItem = isMounted ? safeArray.find((item: any) => {
+    const t = item?.type || (item?.isUsed ? 'used' : undefined);
+    return String(item?.id) === String(product?.id) && (t === (itemType || undefined));
+  }) : null;
   
   const isAdded = !!cartItem;
   const cartItemCount = cartItem ? cartItem.quantity : 0;
 
-  // التحقق من المخزون (Stock)
   const stock = Number(product.stock ?? product.quantity ?? 999);
   const isOutOfStock = stock <= 0;
 
@@ -122,10 +123,10 @@ export default function ProductCard({ product, isUsed = false }: ProductCardProp
           
           {!isMounted ? (
             <div className="grid grid-cols-2 gap-2.5 mt-auto">
-              <div className="bg-[var(--card)] border border-[var(--border)] text-center py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center text-[var(--foreground)] opacity-0">
+              <div className="bg-[var(--card)] border border-[var(--border)] text-center py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center text-[var(--foreground)]">
                 تفاصيل
               </div>
-              <div className="bg-[var(--secondary)] text-white py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center opacity-0">
+              <div className="bg-[var(--secondary)] text-white py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center justify-center opacity-80">
                 اضافة للسلة
               </div>
             </div>
